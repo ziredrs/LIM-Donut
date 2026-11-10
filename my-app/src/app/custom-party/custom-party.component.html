@@ -23,13 +23,8 @@
       <span class="step-label">Cấu hình bánh</span>
     </div>
     <div class="step-line" [class.active]="currentStep() > 2"></div>
-    <div class="step-item" [class.active]="currentStep() >= 3" [class.done]="currentStep() > 3" (click)="goToStep(3)">
+    <div class="step-item" [class.active]="currentStep() >= 3">
       <span class="step-num">3</span>
-      <span class="step-label">Xếp hình set</span>
-    </div>
-    <div class="step-line" [class.active]="currentStep() > 3"></div>
-    <div class="step-item" [class.active]="currentStep() >= 4">
-      <span class="step-num">4</span>
       <span class="step-label">Xác nhận</span>
     </div>
   </div>
@@ -75,17 +70,35 @@
     <!-- Date/Time Picker -->
     <div class="pickup-datetime card shadow-sm rounded-4 p-4 mt-4" *ngIf="selectedTier()" style="max-width:600px;margin-left:auto;margin-right:auto;">
       <h4 class="fs-6 fw-bold mb-3"><i class="bi bi-calendar-event text-primary"></i> Ngày & giờ nhận bánh</h4>
+      <label for="partyBranch" class="form-label">Chi nhánh nhận bánh *</label>
+      <select id="partyBranch" class="form-select mb-3" [ngModel]="branchId()" (ngModelChange)="branchId.set($event)">
+        <option value="">Chọn chi nhánh</option>
+        <option *ngFor="let branch of branches()" [value]="branch._id">{{ branch.name }}</option>
+      </select>
       <p class="text-muted small mb-3">{{ selectedTier()!.name }} cần đặt trước tối thiểu {{ selectedTier()!.leadTimeDays }} ngày. Sớm nhất: {{ earliestDateLabel() }}</p>
-      <div class="row g-3">
-        <div class="col-7">
-          <label class="form-label small fw-semibold">Ngày nhận <span class="text-danger">*</span></label>
-          <input type="date" class="form-control rounded-3" [min]="minPickupDate()" [ngModel]="pickupDate()" (ngModelChange)="pickupDate.set($event)">
-        </div>
-        <div class="col-5">
-          <label class="form-label small fw-semibold">Giờ nhận <span class="text-danger">*</span></label>
-          <input type="time" class="form-control rounded-3" [ngModel]="pickupTime()" (ngModelChange)="pickupTime.set($event)">
-        </div>
-      </div>
+  <div class="row g-3">
+    <div class="col-sm-6">
+      <label for="partyPickupDate" class="form-label">Ngày nhận bánh</label>
+<div class="input-group">
+      <input id="partyPickupDate" type="text" class="form-control" placeholder="dd/mm/yyyy" maxlength="10" inputmode="numeric" [ngModel]="pickupDateText()" (ngModelChange)="changePickupDate($event)">
+<input type="date" class="form-control" style="flex: 0 0 48px; width:48px; color:transparent;" aria-label="Calendar" [ngModel]="pickupDate()" (ngModelChange)="changePickupDateFromCalendar($event)" [min]="minPickupDate()">
+</div>
+    </div>
+    <div class="col-sm-3">
+      <label for="partyPickupHour" class="form-label">Giờ (24h)</label>
+      <select id="partyPickupHour" class="form-select" [ngModel]="pickupHour" (ngModelChange)="changePickupHour($event)">
+        <option value="" disabled>--</option>
+        <option *ngFor="let hour of pickupHours" [value]="hour">{{ hour }}</option>
+      </select>
+    </div>
+    <div class="col-sm-3">
+      <label for="partyPickupMinute" class="form-label">Phút</label>
+      <select id="partyPickupMinute" class="form-select" [disabled]="!pickupHour" [ngModel]="pickupMinute" (ngModelChange)="changePickupMinute($event)">
+        <option *ngFor="let minute of pickupMinutes" [value]="minute">{{ minute }}</option>
+      </select>
+    </div>
+  </div>
+      <div class="text-danger small mt-2" *ngIf="pickupDateText() && !pickupDate()">Vui lòng nhập ngày hợp lệ theo định dạng dd/mm/yyyy.</div>
       <div class="text-danger small mt-2" *ngIf="pickupDate() && pickupDate() < minPickupDate()">
         <i class="bi bi-exclamation-circle"></i> Ngày nhận quá sớm. Vui lòng chọn từ {{ earliestDateLabel() }}.
       </div>
@@ -108,7 +121,7 @@
           <!-- Donut 2D Preview -->
           <div class="donut-stage" [class.pulse]="donutPulse()">
             <div class="donut-shadow"></div>
-            <div class="donut-body"
+            <div class="donut-body" [attr.data-shape]="activeShape()"
               [style.--base-color]="activeFlavorColor().base"
               [style.--inner-color]="activeFlavorColor().inner">
               <div class="sauce-layer"
@@ -275,7 +288,7 @@
             <div class="accordion-body-inner" *ngIf="activeGroup() === 'shape'">
             <div class="surcharge-warn" *ngIf="isOverLimitCategory('shape')"><i class="bi bi-exclamation-triangle-fill text-warning"></i> Vượt quyền. +{{ formatPrice(shapeSurcharge()) }}</div>
             <div class="row g-2">
-              <div class="col-4" *ngFor="let shape of shapes">
+              <div class="col-3" *ngFor="let shape of shapes">
                 <div class="option-card shape-card"
                   [class.selected]="isVariantShapeSelected(shape.id)"
                   [class.unavailable]="!shape.available"
@@ -411,41 +424,8 @@
     </div>
   </section>
 
-  <!-- ==================== STEP 3: Arrangement ==================== -->
+  <!-- ==================== STEP 3: Summary ==================== -->
   <section class="step-section container" *ngIf="currentStep() === 3 && selectedTier()">
-    <div class="section-header text-center mb-4">
-      <h2>Xếp hình set</h2>
-      <p>Chọn cách sắp xếp bánh trong set của bạn, hoặc bỏ qua để dùng hộp mặc định</p>
-    </div>
-    <div class="row g-3 justify-content-center" style="max-width:800px;margin:0 auto;">
-      <div class="col-md-3 col-6" *ngFor="let arr of arrangements">
-        <div class="arrangement-card card text-center p-3 rounded-4"
-          [class.selected]="selectedArrangement() === arr.id"
-          (click)="onArrangementChange(arr.id)">
-          <div class="arrangement-icon mb-2"><i class="bi {{ arr.icon }}" style="font-size:2.5rem;"></i></div>
-          <h5 class="fs-6 fw-bold mb-1">{{ arr.name }}</h5>
-          <p class="text-muted small mb-0">{{ arr.description }}</p>
-          <div class="selected-check" *ngIf="selectedArrangement() === arr.id"><i class="bi bi-check-lg"></i></div>
-        </div>
-      </div>
-    </div>
-    <div class="set-canvas-wrapper mt-4" style="max-width:800px;margin:0 auto;">
-      <canvas #setCanvas class="set-canvas"></canvas>
-      <p class="text-center text-muted small mt-2"><i class="bi bi-hand-index"></i> Click bánh để chọn, click bánh khác để hoán đổi vị trí</p>
-    </div>
-    <div class="d-flex justify-content-between align-items-center pt-4" style="max-width:800px;margin:0 auto;">
-      <button class="btn btn-light rounded-3 fw-semibold px-4 py-2" (click)="prevStep()"><i class="bi bi-arrow-left"></i> Quay lại</button>
-      <div class="d-flex gap-2">
-        <button class="btn btn-outline-secondary rounded-3 fw-semibold px-4 py-2" (click)="skipArrangement()">Bỏ qua</button>
-        <button class="btn btn-primary rounded-3 fw-semibold px-4 py-2" (click)="nextStep()">
-          Tiếp tục <i class="bi bi-arrow-right"></i>
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ==================== STEP 4: Summary ==================== -->
-  <section class="step-section container" *ngIf="currentStep() === 4 && selectedTier()">
     <div class="row g-4">
       <div class="col-lg-7">
         <div class="card shadow-sm rounded-4 p-4">
@@ -515,6 +495,19 @@
             </div>
           </div>
 
+          <fieldset class="party-payment-methods mb-3">
+            <legend class="fw-bold fs-6 mb-3 text-primary">Phương thức thanh toán <span class="text-danger">*</span></legend>
+            <label class="party-payment-option" [class.selected]="paymentMethod() === 'momo'">
+              <input type="radio" name="partyPaymentMethod" value="momo" [ngModel]="paymentMethod()" (ngModelChange)="paymentMethod.set($event)" [disabled]="isSubmitting()">
+              <span>MoMo</span>
+            </label>
+            <label class="party-payment-option" [class.selected]="paymentMethod() === 'vnpay'">
+              <input type="radio" name="partyPaymentMethod" value="vnpay" [ngModel]="paymentMethod()" (ngModelChange)="paymentMethod.set($event)" [disabled]="isSubmitting()">
+              <span>VNPay</span>
+            </label>
+            <p class="small text-muted mb-0">Bạn sẽ được chuyển đến trang thanh toán {{ paymentMethod() === 'momo' ? 'MoMo' : 'VNPay' }} để đặt cọc {{ formatPrice(depositAmount()) }}.</p>
+          </fieldset>
+
           <div class="alert alert-warning rounded-3 mb-3">
             <div class="d-flex align-items-center gap-2 mb-1">
               <i class="bi bi-exclamation-triangle-fill"></i>
@@ -548,7 +541,7 @@
         <div class="summary-preview">
           <div class="donut-stage summary-donut">
             <div class="donut-shadow"></div>
-            <div class="donut-body"
+            <div class="donut-body" [attr.data-shape]="activeShape()"
               [style.--base-color]="activeFlavorColor().base"
               [style.--inner-color]="activeFlavorColor().inner">
               <div class="sauce-layer" *ngIf="activeSauceColor()"

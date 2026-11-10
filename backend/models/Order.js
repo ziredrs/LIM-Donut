@@ -2,6 +2,9 @@ const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
   orderId: { type: String, required: true, unique: true },
+  branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', default: null, index: true },
+  branchName: { type: String, default: '' },
+  inventoryDeducted: { type: Boolean, default: false },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   customerInfo: {
     name: String,
@@ -15,6 +18,11 @@ const orderSchema = new mongoose.Schema({
   },
   items: [mongoose.Schema.Types.Mixed],
   totalAmount: Number,
+  shippingFee: { type: Number, default: null },
+  deliveryRevision: { type: Number, default: 0 },
+  deliveryDistanceKm: { type: Number, default: null },
+  orderEditHistory: [mongoose.Schema.Types.Mixed],
+  deliveryChangeHistory: [mongoose.Schema.Types.Mixed],
   orderType: { type: String, enum: ['small', 'large', 'custom'], default: 'small' },
   depositPercent: { type: Number, default: 0 },
   depositAmount: { type: Number, default: 0 },
@@ -27,6 +35,14 @@ const orderSchema = new mongoose.Schema({
   referralDiscount: { type: Number, default: 0 },
   voucherCode: { type: String, default: null },
   voucherDiscount: { type: Number, default: 0 },
+  voucherConsumed: { type: Boolean, default: null },
+  starsUsed: { type: Number, default: null },
+  cancellation: {
+    reason: String, note: String, at: Date, processedAt: Date,
+    stockRestored: Boolean, voucherReturned: Boolean, starsReturned: Number,
+    depositForfeited: Number,
+    paymentReviewRequired: Boolean
+  },
   cancelDeadline: { type: Date, default: null },
   evidencePhotoUrl: { type: String, default: null },
   status: {
@@ -43,6 +59,7 @@ const orderSchema = new mongoose.Schema({
     status: String,
     at: { type: Date, default: Date.now }
   }],
+  reviewedAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now }
 });
 

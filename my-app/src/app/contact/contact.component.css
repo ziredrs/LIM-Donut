@@ -1,3 +1,4 @@
+@import '../shared-banner.css';
 .contact-page {
   padding-bottom: 60px;
   background-color: #f8fafc;
@@ -5,48 +6,10 @@
 }
 
 /* Page Banner */
-.page-banner {
-  background: linear-gradient(135deg, #e6f0fa 0%, #dbeafe 100%);
-  max-width: 100%;
-  margin: 0 auto 40px;
-  padding: 3.5rem 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0 0 40px 40px;
-  text-align: center;
-  box-shadow: 0 10px 30px rgba(219, 234, 254, 0.3);
-}
 
-.banner-content {
-  max-width: 800px;
-  width: 100%;
-}
 
-.banner-content .subtitle {
-  color: var(--color-blue);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  margin-bottom: 0.75rem;
-  display: block;
-  font-size: 0.9rem;
-}
 
-.banner-content .title {
-  font-size: 2.4rem;
-  font-weight: 800;
-  color: #1e293b;
-  margin-bottom: 1rem;
-  line-height: 1.25;
-}
 
-.banner-content .desc {
-  font-size: 1.05rem;
-  color: #475569;
-  line-height: 1.6;
-}
 
 /* Info Card (Restored with background image) */
 .info-card {
@@ -278,14 +241,7 @@
 }
 
 @media (max-width: 768px) {
-  .page-banner {
-    padding: 2.5rem 15px;
-    border-radius: 0 0 25px 25px;
-  }
 
-  .banner-content .title {
-    font-size: 1.8rem;
-  }
 
   .submit-btn {
     padding: 12px 30px;

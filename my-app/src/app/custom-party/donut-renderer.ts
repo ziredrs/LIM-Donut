@@ -26,6 +26,7 @@ export class DonutRenderer {
   private renderer!: THREE.WebGLRenderer;
   private controls!: OrbitControls;
   private animationId = 0;
+  private resizeObserver: ResizeObserver | null = null;
 
   private donutBody!: THREE.Mesh;
   private glazeTop!: THREE.Mesh;
@@ -74,8 +75,8 @@ export class DonutRenderer {
 
     this.animate();
 
-    const ro = new ResizeObserver(() => this.onResize(canvas));
-    ro.observe(canvas.parentElement!);
+    this.resizeObserver = new ResizeObserver(() => this.onResize(canvas));
+    this.resizeObserver.observe(canvas.parentElement!);
   }
 
   private setupLights() {
@@ -156,7 +157,7 @@ export class DonutRenderer {
           ? new THREE.TorusGeometry(1.21, 0.50, 48, 96, Math.PI)
           : new THREE.TorusGeometry(1.21, 0.50, 48, 96);
       case 'square':
-        return this.buildSquareDonut(1.21, 0.50, half);
+        return this.buildSquareDonut(1.2, 0.565, half, true);
       case 'heart':
         return this.buildHeartDonut(1.01, half);
       case 'star':
@@ -166,21 +167,39 @@ export class DonutRenderer {
     }
   }
 
-  private buildSquareDonut(R: number, r: number, half = false): THREE.BufferGeometry {
-    const path = new THREE.CurvePath<THREE.Vector3>();
-    const s = R;
-    const corners = [
-      new THREE.Vector3(s, 0, s),
-      new THREE.Vector3(-s, 0, s),
-      new THREE.Vector3(-s, 0, -s),
-      new THREE.Vector3(s, 0, -s),
-    ];
-    for (let i = 0; i < corners.length; i++) {
-      const next = corners[(i + 1) % corners.length];
-      path.add(new THREE.LineCurve3(corners[i], next));
+  private buildSquareDonut(R: number, r: number, half = false, topOnly = false): THREE.BufferGeometry {
+    // Tangent-continuous rounded corners avoid folded tube faces at 90-degree joins.
+    // The corner radius exceeds the tube radius so the inside never pinches.
+    const corner = 0.75;
+    const c = R - corner;
+    const outline = new THREE.Path();
+    outline.moveTo(R, -c);
+    outline.lineTo(R, c);
+    outline.absarc(c, c, corner, 0, Math.PI / 2, false);
+    outline.lineTo(-c, R);
+    outline.absarc(-c, c, corner, Math.PI / 2, Math.PI, false);
+    outline.lineTo(-R, -c);
+    outline.absarc(-c, -c, corner, Math.PI, Math.PI * 1.5, false);
+    outline.lineTo(c, -R);
+    outline.absarc(c, -c, corner, Math.PI * 1.5, Math.PI * 2, false);
+    const path = new class extends THREE.Curve<THREE.Vector3> {
+      constructor() { super(); }
+      override getPoint(t: number, target = new THREE.Vector3()) {
+        const point = outline.getPoint(half ? t * 0.5 : t);
+        return target.set(point.x, 0, point.y);
+      }
+    }();
+    const geo = new THREE.TubeGeometry(path, half ? 96 : 192, r, 48, !half);
+    if (topOnly) {
+      const position = geo.getAttribute('position');
+      const index = geo.getIndex()!;
+      const top: number[] = [];
+      for (let i = 0; i < index.count; i += 3) {
+        const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
+        if ([a, b, c].every(vertex => position.getY(vertex) >= -0.00001)) top.push(a, b, c);
+      }
+      geo.setIndex(top);
     }
-    const tubeSeg = half ? 32 : 64;
-    const geo = new THREE.TubeGeometry(path as any, tubeSeg, r, 24, !half);
     return geo;
   }
 
@@ -226,6 +245,11 @@ export class DonutRenderer {
   private switchShape(shape: ShapeGeometry) {
     if (shape === this.currentShape) return;
     this.currentShape = shape;
+    // TorusGeometry starts in XY; the custom tube paths already lie in XZ.
+    const rotation = shape === 'torus' ? Math.PI / 2 : 0;
+    this.donutBody.rotation.x = rotation;
+    this.glazeTop.rotation.x = rotation;
+    this.glazeHalf.rotation.x = rotation;
 
     const oldBodyGeo = this.donutBody.geometry;
     this.donutBody.geometry = this.buildBodyGeometry(shape);
@@ -307,19 +331,45 @@ export class DonutRenderer {
     let seed = 42;
     const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 
-    const R = 1.2;
-    const r = 0.55;
+    // Sample the actual rendered surface in world space, including each shape and sauce coverage.
+    this.toppingGroup.rotation.set(0, 0, 0);
+    this.donutBody.updateMatrixWorld(true);
+    this.glazeTop.updateMatrixWorld(true);
+    this.glazeHalf.updateMatrixWorld(true);
+    this.drizzleGroup.updateMatrixWorld(true);
+    const surface = this.glazeTop.visible ? this.glazeTop
+      : this.glazeHalf.visible ? this.glazeHalf : this.donutBody;
+    const bounds = new THREE.Box3().setFromObject(surface);
+    const ray = new THREE.Raycaster();
+    const down = new THREE.Vector3(0, -1, 0);
+    const up = new THREE.Vector3(0, 1, 0);
 
     toppings.forEach(topping => {
       for (let i = 0; i < perTopping; i++) {
-        const theta = rand() * Math.PI * 2;
-        const phi = rand() * Math.PI * 0.7 - Math.PI * 0.15;
-
-        const x = (R + r * Math.cos(phi)) * Math.cos(theta);
-        const z = (R + r * Math.cos(phi)) * Math.sin(theta);
-        const y = r * Math.sin(phi);
-
-        if (y < -0.15) continue;
+        let hit: THREE.Intersection | undefined;
+        const normal = new THREE.Vector3();
+        for (let attempt = 0; attempt < 300; attempt++) {
+          ray.set(new THREE.Vector3(
+            bounds.min.x + rand() * (bounds.max.x - bounds.min.x),
+            bounds.max.y + 1,
+            bounds.min.z + rand() * (bounds.max.z - bounds.min.z)
+          ), down);
+          const surfaces: THREE.Object3D[] = [surface];
+          if (this.drizzleGroup.visible) surfaces.push(this.drizzleGroup);
+          const candidate = ray.intersectObjects(surfaces, true)[0];
+          if (!candidate?.face) continue;
+          normal.copy(candidate.face.normal).applyNormalMatrix(
+            new THREE.Matrix3().getNormalMatrix(candidate.object.matrixWorld)
+          ).normalize();
+          if (normal.y < 0.45) continue;
+          // Ignore sauce faces hidden inside the dough.
+          const bodyHit = ray.intersectObject(this.donutBody)[0];
+          if (!bodyHit) continue;
+          if (bodyHit && bodyHit.point.y > candidate.point.y + 0.005) continue;
+          hit = candidate;
+          break;
+        }
+        if (!hit) continue;
 
         let geo: THREE.BufferGeometry;
         if (topping.shape === 'circle') {
@@ -329,6 +379,7 @@ export class DonutRenderer {
           geo = new THREE.BoxGeometry(w, 0.02, w * (2 + rand()));
         } else {
           geo = new THREE.CylinderGeometry(0.015, 0.015, 0.1 + rand() * 0.06, 5);
+          geo.rotateZ(Math.PI / 2);
         }
 
         const color = topping.colors[Math.floor(rand() * topping.colors.length)];
@@ -339,17 +390,18 @@ export class DonutRenderer {
         });
 
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(x, y, z);
-
-        const normal = new THREE.Vector3(x - R * Math.cos(theta), y, z - R * Math.sin(theta)).normalize();
-        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+        geo.computeBoundingBox();
+        const thickness = geo.boundingBox!.max.y;
+        mesh.position.copy(hit.point);
+        mesh.position.y += thickness * 0.8 / normal.y;
+        mesh.quaternion.setFromUnitVectors(up, normal);
         mesh.rotateOnAxis(new THREE.Vector3(0, 1, 0), rand() * Math.PI * 2);
 
         this.toppingGroup.add(mesh);
       }
     });
 
-    this.toppingGroup.rotation.x = Math.PI / 2;
+    this.toppingGroup.rotation.set(0, 0, 0);
   }
 
   private clearGroup(group: THREE.Group) {
@@ -395,6 +447,8 @@ export class DonutRenderer {
   }
 
   dispose() {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     cancelAnimationFrame(this.animationId);
     this.controls.dispose();
     this.renderer.dispose();

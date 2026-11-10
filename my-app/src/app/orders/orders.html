@@ -61,6 +61,12 @@
         <button class="btn flex-fill status-tab-btn" [class.active]="selectedStatus() === 'processing'" (click)="selectedStatus.set('processing')">
           <i class="bi bi-clock-fill"></i> Đang xử lý <span class="badge">{{ statusCounts().processing }}</span>
         </button>
+        <button class="btn flex-fill status-tab-btn" [class.active]="selectedStatus() === 'Đã xác nhận'" (click)="selectedStatus.set('Đã xác nhận')">
+          <i class="bi bi-check-circle-fill"></i> Đã xác nhận <span class="badge">{{ statusCounts().confirmed }}</span>
+        </button>
+        <button class="btn flex-fill status-tab-btn" [class.active]="selectedStatus() === 'Đang chuẩn bị'" (click)="selectedStatus.set('Đang chuẩn bị')">
+          <i class="bi bi-box-seam"></i> Đang chuẩn bị <span class="badge">{{ statusCounts().preparing }}</span>
+        </button>
         <button class="btn flex-fill status-tab-btn" [class.active]="selectedStatus() === 'shipping'" (click)="selectedStatus.set('shipping')">
           <i class="bi bi-truck"></i> Đang giao/lấy <span class="badge">{{ statusCounts().shipping }}</span>
         </button>
@@ -120,7 +126,7 @@
             </div>
 
             <!-- Progress Bar -->
-            <div class="order-progress">
+            <div class="order-progress" *ngIf="order.status !== 'Đã hủy'">
               <div class="progress-line">
                 <div class="line-fill" [style.width.%]="getProgressPercent(order.status)"></div>
               </div>
@@ -149,6 +155,12 @@
             </div>
 
             <div class="order-delivery-details rounded-3 p-3 mb-4">
+              @if (order.cancellation; as cancellation) {
+                <p class="text-danger fw-semibold mb-2">Đã hủy: {{ cancellation.reason }}</p>
+                @if (cancellation.note) { <p class="mb-2">Ghi chú: {{ cancellation.note }}</p> }
+                <p class="small text-muted">Thời gian hủy: {{ cancellation.at | date:'dd/MM/yyyy HH:mm' }}</p>
+                @if (cancellation.paymentReviewRequired) { <p class="small text-muted">Khoản thanh toán cần được cửa hàng đối soát theo chính sách.</p> }
+              }
               <div class="row mb-2">
                 <span class="col-4 col-md-3 text-muted">Người nhận:</span>
                 <span class="col-8 col-md-9 fw-semibold">{{ order.customerInfo.name }} - {{ order.customerInfo.phone }}</span>
@@ -186,10 +198,15 @@
             </div>
             <div class="d-flex gap-2">
               @if (canCancel(order)) {
-                <button class="btn btn-outline-danger" (click)="cancelOrder(order._id!)">Hủy đơn</button>
+                <button class="btn btn-outline-danger" (click)="cancelOrder(order._id!)">Hủy đơn hàng</button>
               }
               <button class="btn btn-outline-primary" (click)="openDetail(order)">Xem chi tiết</button>
               @if (order.status === 'Hoàn thành') {
+                @if (isOrderReviewed(order)) {
+                  <span class="btn text-success disabled"><i class="bi bi-check-circle"></i> Đã đánh giá</span>
+                } @else {
+                  <button class="btn btn-outline-primary" [disabled]="reviewSubmitting()" (click)="openReview(order)" [attr.aria-expanded]="reviewOrder()?._id === order._id"><i class="bi bi-star"></i> Đánh giá</button>
+                }
                 <button class="btn btn-outline-success" (click)="reorder(order)"><i class="bi bi-arrow-repeat"></i> Đặt lại</button>
               }
               @if (canComplain(order)) {
@@ -200,6 +217,45 @@
               }
             </div>
           </div>
+          @if (reviewOrder()?._id === order._id && order.status === 'Hoàn thành') {
+            <section class="order-review-section" aria-label="Đánh giá sản phẩm đã nhận">
+              <h3>Đánh giá sản phẩm</h3>
+              <p class="text-muted">Mỗi đơn hàng chỉ được gửi đánh giá một lần. Vui lòng đánh giá các sản phẩm trước khi gửi.</p>
+              <form (ngSubmit)="submitOrderReview()">
+              @for (draft of reviewDrafts(); track draft.productId; let i = $index) {
+                <div class="order-review-form">
+                  <h4>{{ draft.name }}</h4>
+                  @if (draft.sent) {
+                    <p class="text-success mb-0" role="status"><i class="bi bi-check-circle"></i> Cảm ơn bạn đã đánh giá sản phẩm!</p>
+                  } @else {
+                    <div class="review-quality">
+                      <span class="fw-semibold">Chất lượng sản phẩm:</span>
+                      <div class="review-stars" role="group" aria-label="Chọn số sao đánh giá">
+                        @for (star of [1, 2, 3, 4, 5]; track star) {
+                          <button type="button" [disabled]="draft.busy" [attr.aria-label]="star + ' sao'" [attr.aria-pressed]="draft.rating === star" (click)="updateReview(i, { rating: star })"><i class="bi" [class.bi-star-fill]="star <= draft.rating" [class.bi-star]="star > draft.rating"></i></button>
+                        }
+                      </div>
+                    </div>
+                    <div class="review-suggestions">
+                      @for (suggestion of reviewSuggestions; track suggestion) {
+                        <button type="button" [disabled]="draft.busy" (click)="addReviewSuggestion(i, suggestion)">+ {{ suggestion }}</button>
+                      }
+                    </div>
+                    <input class="form-control mb-3" [name]="'reviewTitle' + i" [ngModel]="draft.title" (ngModelChange)="updateReview(i, { title: $event })" [disabled]="draft.busy" maxlength="150" placeholder="Để lại đánh giá chi tiết tại đây" aria-label="Tiêu đề đánh giá">
+                    <textarea class="form-control" [name]="'reviewComment' + i" [ngModel]="draft.comment" (ngModelChange)="updateReview(i, { comment: $event })" [disabled]="draft.busy" rows="4" maxlength="2000" required placeholder="Hãy để lại nhận xét cho sản phẩm này bạn nhé! LIMDonut xin chân thành cảm ơn." aria-label="Nhận xét sản phẩm"></textarea>
+                    @if (draft.error) { <p class="text-danger mt-2" role="alert">{{ draft.error }}</p> }
+                  }
+                </div>
+              } @empty {
+                <p class="text-muted">Đơn này không có sản phẩm trong menu để đánh giá.</p>
+              }
+              @if (reviewError()) { <p class="text-danger mt-3" role="alert">{{ reviewError() }}</p> }
+              @if (reviewDrafts().length) {
+                <div class="text-end mt-3"><button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold" [disabled]="!canSubmitOrderReview() || isOrderReviewed(order)">{{ reviewSubmitting() ? 'Đang gửi…' : 'Gửi đánh giá' }}</button></div>
+              }
+              </form>
+            </section>
+          }
         </div>
       } @empty {
         <div class="text-center py-5">
@@ -350,3 +406,28 @@
     </div>
   }
 </main>
+
+<dialog #cancelOtpDialog class="cancel-otp-dialog" aria-labelledby="cancelOtpTitle" (cancel)="otpBusy() && $event.preventDefault()">
+  <h2 id="cancelOtpTitle">{{ otpSuccess() ? 'Đã hủy đơn hàng' : 'Xác nhận hủy đơn bằng OTP' }}</h2>
+  @if (otpSuccess()) {
+    <p>Đơn {{ selectedCancelOrder()?.orderId }} đã được hủy thành công.</p>
+  } @else {
+    <p>Đơn hàng: <strong>{{ selectedCancelOrder()?.orderId }}</strong></p>
+    @if (otpDemoCode()) {
+      <div class="alert alert-info" role="status"><strong>OTP demo trên local — không gửi SMS</strong><p class="mb-1 mt-2">Mã để thử luồng: <strong class="fs-4" style="letter-spacing:.25em">{{ otpDemoCode() }}</strong></p><small>Mã có hiệu lực 5 phút. Nhập mã bên dưới để xác nhận; đơn hàng sẽ được cập nhật trong database đang kết nối.</small></div>
+    } @else if (otpSent()) {
+      <p>Nhập OTP gồm <strong>4 chữ số</strong> đã gửi đến <strong>{{ maskedPhone() }}</strong>. Mã có hiệu lực 5 phút.</p>
+    }
+    <form (ngSubmit)="confirmCancelOtp()">
+      <label for="cancelOtp" class="form-label">Mã OTP <span class="text-danger">*</span></label>
+      <input id="cancelOtp" name="cancelOtp" class="form-control otp-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="4" pattern="[0-9]{4}" required placeholder="0000" [value]="cancelOtp()" (input)="updateCancelOtp($event)" aria-describedby="cancelOtpError">
+      <p class="small text-muted mt-3">Tiền cọc (nếu có) sẽ không được hoàn theo chính sách hủy đơn.</p>
+      <p id="cancelOtpError" class="text-danger" role="alert">{{ otpError() }}</p>
+      <button type="submit" class="btn btn-danger w-100" [disabled]="cancelOtp().length !== 4 || otpBusy()">{{ otpBusy() ? 'Đang xử lý…' : 'Xác nhận hủy đơn' }}</button>
+      <button type="button" class="btn btn-link mt-2" [disabled]="otpBusy() || resendSeconds() > 0" (click)="sendCancelOtp()">{{ resendSeconds() ? 'Gửi lại sau ' + resendSeconds() + ' giây' : 'Gửi lại OTP' }}</button>
+    </form>
+  }
+  <button type="button" class="btn btn-secondary mt-3" [disabled]="otpBusy()" (click)="cancelOtpDialog.close()">Đóng</button>
+</dialog>
+
+<app-cancel-reason-dialog (confirmed)="beginCancelOtp($event)" (deliveryUpdated)="onDeliveryUpdated()" />

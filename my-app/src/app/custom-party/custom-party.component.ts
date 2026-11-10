@@ -7,9 +7,10 @@ import {
   PartyTier, SauceCoverage, ToppingParticle, generateParticles, DonutVariant
 } from './party.config';
 import { DonutRenderer, DonutState, ShapeGeometry } from './donut-renderer';
-import { PartySetRenderer, ArrangementType } from './party-set-renderer';
-import { OrderService } from '../order.service';
 import { AuthService } from '../auth.service';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../environments/environment';
+import { PICKUP_HOURS, PICKUP_MINUTES, localDateValue, validPickupTime, displayPickupDate, parsePickupDate } from '../pickup-time.util';
 
 let variantIdCounter = 0;
 
@@ -34,8 +35,19 @@ function createDefaultVariant(): DonutVariant {
   styleUrl: './custom-party.component.css'
 })
 export class CustomPartyComponent implements OnDestroy {
-  @ViewChild('donutCanvas') donutCanvas!: ElementRef<HTMLCanvasElement>;
-  @ViewChild('setCanvas') setCanvas!: ElementRef<HTMLCanvasElement>;
+  private donutCanvas?: ElementRef<HTMLCanvasElement>;
+  private previewFrame = 0;
+  @ViewChild('donutCanvas') set previewCanvas(canvas: ElementRef<HTMLCanvasElement> | undefined) {
+    if (canvas?.nativeElement === this.donutCanvas?.nativeElement) return;
+    cancelAnimationFrame(this.previewFrame);
+    this.donutRenderer?.dispose();
+    this.donutRenderer = null;
+    this.rendererInitialized = false;
+    this.donutCanvas = canvas;
+    if (canvas) {
+      this.previewFrame = requestAnimationFrame(() => this.initDonut3D());
+    }
+  }
 
   readonly tiers = PARTY_TIERS;
   readonly shapes = SHAPES;
@@ -47,35 +59,45 @@ export class CustomPartyComponent implements OnDestroy {
 
   private donutRenderer: DonutRenderer | null = null;
   private rendererInitialized = false;
-  private setRenderer: PartySetRenderer | null = null;
-  private setRendererInitialized = false;
 
   readonly selectedTier = signal<PartyTier | null>(null);
+  readonly branchId = signal('');
+  readonly branches = signal<{ _id: string; name: string; active: boolean }[]>([]);
   readonly variants = signal<DonutVariant[]>([]);
   readonly activeVariantIndex = signal(0);
   readonly currentStep = signal(1);
   readonly showConfetti = signal(false);
   readonly donutPulse = signal(false);
   readonly pickupDate = signal('');
+  readonly pickupDateText = signal('');
+  changePickupDateFromCalendar(value: string) { this.changePickupDate(displayPickupDate(value)); }
+  changePickupDate(value: string) {
+    this.pickupDateText.set(value);
+    this.pickupDate.set(parsePickupDate(value));
+  }
   readonly pickupTime = signal('');
-  readonly selectedArrangement = signal('none');
-  readonly activeGroup = signal<'shape' | 'flavor' | 'sauce' | 'topping'>('shape');
-  readonly slotAssignments = signal<number[]>([]);
-  readonly selectedSlotIndex = signal(-1);
+  readonly pickupHours = PICKUP_HOURS;
+  get pickupHour() { return this.pickupTime().split(':')[0] || ''; }
+  get pickupMinute() { return this.pickupTime().split(':')[1] || '00'; }
+  get pickupMinutes() { return this.pickupHour === '21' ? ['00'] : PICKUP_MINUTES; }
 
-  readonly arrangements = [
-    { id: 'none', name: 'Mặc định (hộp)', icon: 'bi-box-seam', description: 'Xếp trong hộp tiêu chuẩn' },
-    { id: 'pyramid', name: 'Tháp', icon: 'bi-triangle', description: 'Xếp tầng kim tự tháp' },
-    { id: 'circle', name: 'Vòng tròn', icon: 'bi-circle', description: 'Xếp thành vòng tròn' },
-    { id: 'heart', name: 'Trái tim', icon: 'bi-heart', description: 'Xếp hình trái tim' },
-  ];
+  changePickupHour(hour: string) {
+    this.pickupTime.set(hour ? hour + ':' + (hour === '21' ? '00' : this.pickupMinute) : '');
+  }
+
+  changePickupMinute(minute: string) {
+    if (this.pickupHour) this.pickupTime.set(this.pickupHour + ':' + minute);
+  }
+  readonly activeGroup = signal<'shape' | 'flavor' | 'sauce' | 'topping'>('shape');
+
+
 
   readonly minPickupDate = computed(() => {
     const tier = this.selectedTier();
     if (!tier) return '';
     const d = new Date();
     d.setDate(d.getDate() + tier.leadTimeDays);
-    return d.toISOString().split('T')[0];
+    return localDateValue(d);
   });
 
   readonly isDateTimeValid = computed(() => {
@@ -83,7 +105,7 @@ export class CustomPartyComponent implements OnDestroy {
     const time = this.pickupTime();
     if (!date || !time) return false;
     const min = this.minPickupDate();
-    return date >= min;
+    return date >= min && validPickupTime(time) && Number.isFinite(new Date(`${date}T${time}:00`).getTime());
   });
 
   readonly earliestDateLabel = computed(() => {
@@ -247,7 +269,7 @@ export class CustomPartyComponent implements OnDestroy {
 
   readonly canProceed = computed(() => {
     const step = this.currentStep();
-    if (step === 1) return this.selectedTier() !== null && this.isDateTimeValid();
+    if (step === 1) return this.selectedTier() !== null && !!this.branchId() && this.isDateTimeValid();
     if (step === 2) {
       const vs = this.variants();
       if (vs.length === 0) return false;
@@ -280,10 +302,10 @@ export class CustomPartyComponent implements OnDestroy {
     };
   });
 
-  private orderService = inject(OrderService);
   private authService = inject(AuthService);
   readonly orderError = signal('');
   readonly isSubmitting = signal(false);
+  readonly paymentMethod = signal<'momo' | 'vnpay'>('momo');
   readonly customerName = signal('');
   readonly customerPhone = signal('');
   readonly customerInfoError = signal('');
@@ -306,6 +328,23 @@ export class CustomPartyComponent implements OnDestroy {
   });
 
   constructor(private router: Router) {
+    try {
+      const draft = JSON.parse(sessionStorage.getItem('customPartyPaymentDraft') || 'null');
+      const tier = draft && PARTY_TIERS.find(t => t.id === draft.tierId);
+      if (tier && Array.isArray(draft.variants) && draft.variants.length) {
+        this.selectedTier.set(tier);
+        this.branchId.set(draft.branchId || '');
+        this.variants.set(draft.variants);
+        variantIdCounter = Math.max(variantIdCounter, ...draft.variants.map((v: DonutVariant) => v.id));
+        this.pickupDate.set(draft.pickupDate || '');
+        this.pickupDateText.set(displayPickupDate(draft.pickupDate || ''));
+        this.pickupTime.set(draft.pickupTime || '');
+        this.customerName.set(draft.name || ''); this.customerPhone.set(draft.phone || '');
+        this.paymentMethod.set(draft.paymentMethod === 'vnpay' ? 'vnpay' : 'momo');
+        this.currentStep.set(3);
+      }
+    } catch { sessionStorage.removeItem('customPartyPaymentDraft'); }
+    inject(HttpClient).get<{ _id: string; name: string; active: boolean }[]>(`${environment.apiBase}/api/branches`).subscribe({ next: rows => this.branches.set(rows.filter(b => b.active)) });
     effect(() => {
       const shape = this.activeShape();
       const flavorColor = this.activeFlavorColor();
@@ -349,8 +388,8 @@ export class CustomPartyComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
+    cancelAnimationFrame(this.previewFrame);
     this.donutRenderer?.dispose();
-    this.setRenderer?.dispose();
   }
 
   private buildSlotAssignments(): number[] {
@@ -360,40 +399,6 @@ export class CustomPartyComponent implements OnDestroy {
       for (let i = 0; i < v.quantity; i++) assignments.push(idx);
     });
     return assignments;
-  }
-
-  initSet3D() {
-    if (this.setRendererInitialized || !this.setCanvas) return;
-    const canvas = this.setCanvas.nativeElement;
-    if (!canvas) return;
-    this.setRenderer = new PartySetRenderer();
-    this.setRenderer.init(canvas);
-    this.setRendererInitialized = true;
-
-    this.setRenderer.onSwap((a, b) => {
-      const sa = [...this.slotAssignments()];
-      [sa[a], sa[b]] = [sa[b], sa[a]];
-      this.slotAssignments.set(sa);
-    });
-    this.setRenderer.onSelect((idx) => this.selectedSlotIndex.set(idx));
-
-    this.refreshSet3D();
-  }
-
-  refreshSet3D() {
-    if (!this.setRenderer) return;
-    const sa = this.buildSlotAssignments();
-    this.slotAssignments.set(sa);
-    this.setRenderer.updateSet(
-      this.variants(),
-      this.selectedArrangement() as ArrangementType,
-      sa,
-    );
-  }
-
-  onArrangementChange(id: string) {
-    this.selectedArrangement.set(id);
-    this.refreshSet3D();
   }
 
   triggerPulse() {
@@ -410,8 +415,8 @@ export class CustomPartyComponent implements OnDestroy {
       this.variants.set([first]);
       this.activeVariantIndex.set(0);
       this.pickupDate.set('');
+      this.pickupDateText.set('');
       this.pickupTime.set('');
-      this.selectedArrangement.set('none');
     }
   }
 
@@ -563,18 +568,19 @@ export class CustomPartyComponent implements OnDestroy {
     }
   }
   nextStep() {
-    if (this.currentStep() < 4 && this.canProceed()) {
+    if (this.currentStep() < 3 && this.canProceed()) {
       this.currentStep.update(s => s + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      if (this.currentStep() === 2) setTimeout(() => this.initDonut3D(), 100);
-      if (this.currentStep() === 3) setTimeout(() => this.initSet3D(), 150);
-      if (this.currentStep() === 4) setTimeout(() => this.initDonut3D(), 100);
     }
   }
   prevStep() { if (this.currentStep() > 1) { this.currentStep.update(s => s - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); } }
-  skipArrangement() { this.selectedArrangement.set('none'); this.nextStep(); }
 
   confirmOrder() {
+    if (!this.branchId()) { this.orderError.set('Vui lòng chọn chi nhánh nhận bánh.'); return; }
+    if (!this.isDateTimeValid()) {
+      this.orderError.set('Vui lòng chọn lại ngày và giờ nhận bánh hợp lệ (07:00–21:00).');
+      return;
+    }
     const data = this.orderData();
     const tier = this.selectedTier();
     if (!this.isCustomerInfoValid()) {
@@ -601,46 +607,46 @@ export class CustomPartyComponent implements OnDestroy {
     const pickupDateTime = `${this.pickupDate()} ${this.pickupTime()}`;
     const order: any = {
       orderId: 'CP-' + Math.floor(1000000 + Math.random() * 9000000),
+      branchId: this.branchId(),
       totalAmount: data.totalPrice,
       orderType: 'custom',
       depositPercent: data.depositPercent,
       depositAmount: data.depositAmount,
       remainingAmount: data.totalPrice - data.depositAmount,
       deliveryMethod: 'pickup',
+      paymentMethod: this.paymentMethod(),
+      paymentStatus: 'pending',
+      depositPaid: false,
       status: 'Đã đặt',
       customerInfo: {
         name: this.customerName().trim(),
         phone: this.customerPhone(),
         address: `Lấy tại quầy (Custom Party ${tier.name})`,
         deliveryTime: pickupDateTime,
-        notes: `Custom Party ${tier.name} - ${tier.quantity} bánh - Xếp hình: ${this.arrangements.find(a => a.id === this.selectedArrangement())?.name ?? 'Mặc định'}`,
+        notes: `Custom Party ${tier.name} - ${tier.quantity} bánh`,
       },
       items,
-      customPartyMeta: { ...data, arrangement: this.selectedArrangement(), slotAssignments: this.slotAssignments() },
+      customPartyMeta: { ...data, arrangement: 'none', slotAssignments: this.buildSlotAssignments() },
       cancelDeadline: this.cancelDeadline()?.toISOString() ?? null,
       statusHistory: [{ status: 'Đã đặt', at: new Date() }],
     };
 
     this.isSubmitting.set(true);
     this.orderError.set('');
-    this.orderService.addOrder(order).subscribe({
-      next: () => {
-        this.showConfetti.set(true);
-        this.authService.fetchMe().subscribe({ error: () => {} });
-        setTimeout(() => {
-          this.showConfetti.set(false);
-          if (this.authService.isLoggedIn()) {
-            this.router.navigate(['/orders']);
-          } else {
-            this.router.navigate(['/orders'], { queryParams: { phone: this.customerPhone(), name: this.customerName().trim(), justPlaced: order.orderId } });
-          }
-        }, 2000);
-      },
-      error: (err) => {
-        this.isSubmitting.set(false);
-        this.orderError.set(err.error?.message || 'Lỗi khi tạo đơn hàng. Vui lòng thử lại.');
-      }
-    });
+    try {
+      sessionStorage.setItem('customPartyPaymentDraft', JSON.stringify({
+        tierId: tier.id, branchId: this.branchId(), variants: this.variants(),
+        pickupDate: this.pickupDate(), pickupTime: this.pickupTime(),
+        name: this.customerName(), phone: this.customerPhone(), paymentMethod: this.paymentMethod()
+      }));
+      localStorage.setItem('pendingOrder', JSON.stringify(order));
+      this.router.navigate([this.paymentMethod() === 'momo' ? '/payment/momo' : '/payment/vnpay']).then(navigated => {
+        if (!navigated) this.isSubmitting.set(false);
+      }).catch(() => this.isSubmitting.set(false));
+    } catch {
+      this.isSubmitting.set(false);
+      this.orderError.set('Không lưu được thông tin thanh toán. Vui lòng thử lại.');
+    }
   }
 
   getToppingName(id: string): string { return TOPPINGS.find(t => t.id === id)?.name ?? ''; }

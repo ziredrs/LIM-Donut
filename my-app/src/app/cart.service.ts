@@ -7,6 +7,7 @@ export interface CartTopping {
 }
 
 export interface CartItem {
+  selected?: boolean;
   id: string; // Unique key (id + hash of options)
   productId: number;
   name: string;
@@ -36,6 +37,21 @@ export class CartService {
   
   // Signals for UI
   readonly items = this.cartItems.asReadonly();
+  readonly selectedItems = computed(() => this.cartItems().filter(item => item.selected !== false));
+
+  toggleSelection(id: string) {
+    this.cartItems.update(items => items.map(item => item.id === id
+      ? { ...item, selected: item.selected === false } : item));
+  }
+
+  removePurchasedItems(purchased: { id: string; quantity: number }[]) {
+    this.cartItems.update(items => items.flatMap(item => {
+      const bought = purchased.find(entry => entry.id === item.id);
+      if (!bought) return [item];
+      const quantity = item.quantity - bought.quantity;
+      return quantity > 0 ? [{ ...item, quantity }] : [];
+    }));
+  }
   
   readonly totalItems = computed(() => {
     return this.cartItems().reduce((acc, item) => acc + item.quantity, 0);

@@ -126,19 +126,3 @@
   align-items: center;
   justify-content: center;
 }
-
-/* Policy */
-.policy-block h4 {
-  font-weight: 600;
-  margin-bottom: 10px;
-}
-
-.policy-block ul {
-  padding-left: 20px;
-}
-
-.policy-block ul li {
-  margin-bottom: 8px;
-  line-height: 1.6;
-  color: #444;
-}

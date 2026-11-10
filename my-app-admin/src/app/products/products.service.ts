@@ -47,6 +47,27 @@ export class ProductsService {
 
   products = signal<AdminProduct[]>([]);
   categories = signal<Category[]>([]);
+  branches = signal<{ _id: string; name: string; active: boolean }[]>([]);
+  branchId = signal('');
+  inventory = signal<Record<number, number>>({});
+  fetchBranches() {
+    this.http.get<{ _id: string; name: string; active: boolean }[]>(`${environment.apiBase}/api/branches`).subscribe({ next: rows => this.branches.set(rows.filter(b => b.active)) });
+  }
+  fetchInventory() {
+    this.inventory.set({});
+    if (!this.branchId()) return;
+    const branchId = this.branchId();
+    this.http.get<{ productId: number; stock: number }[]>(`${environment.apiBase}/api/inventory/${branchId}`).subscribe({
+      next: rows => { if (this.branchId() === branchId) this.inventory.set(Object.fromEntries(rows.map(row => [row.productId, row.stock]))); },
+      error: () => alert('Không tải được tồn kho chi nhánh.')
+    });
+  }
+  saveStock(productId: number, stock: number) {
+    if (!this.branchId()) { alert('Vui lòng chọn chi nhánh.'); return; }
+    this.http.put(`${environment.apiBase}/api/inventory/${this.branchId()}/${productId}`, { stock }).subscribe({
+      next: () => { this.fetchInventory(); this.fetchAll(); }, error: err => alert(err.error?.message || 'Không lưu được tồn kho.')
+    });
+  }
 
   fetchAll() {
     this.http.get<AdminProduct[]>(this.apiUrl).subscribe({

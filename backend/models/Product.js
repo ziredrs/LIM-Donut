@@ -22,7 +22,7 @@ const productSchema = new mongoose.Schema({
   },
   allergens: [{ type: String }],
   sold: { type: Number, default: 0 },
-  stock: { type: Number, default: 0 },
+  stock: { type: Number, default: 0 }, // Legacy only; live stock is derived from BranchInventory.
   flashSale: {
     type: {
       discountPercent: Number,

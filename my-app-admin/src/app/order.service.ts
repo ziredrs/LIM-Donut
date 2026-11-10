@@ -5,6 +5,8 @@ import { environment } from '../environments/environment';
 export interface Order {
   _id: string;
   orderId: string;
+  branchId?: string;
+  branchName?: string;
   customerInfo: { name: string; phone: string; address: string; deliveryTime: string; notes?: string; isGift?: boolean; giftMessage?: string; hideGiftPrice?: boolean };
   items: any[];
   totalAmount: number;

@@ -47,12 +47,14 @@ app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/contact', require('./routes/contact'));
 app.use('/api/complaints', require('./routes/complaints'));
 app.use('/api/products', require('./routes/products'));
+app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/vouchers', require('./routes/vouchers'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/blog', require('./routes/blog'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/branches', require('./routes/branches'));
+app.use('/api/delivery-location', require('./routes/delivery-location'));
 
 // Serve ảnh đã upload
 app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));

@@ -24,4 +24,8 @@ const contactLimiter = rateLimit({
   message: { message: 'Bạn gửi liên hệ quá nhiều lần, vui lòng thử lại sau ít phút.' }
 });
 
-module.exports = { authLimiter, otpLimiter, contactLimiter };
+const cancelOtpVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: { message: 'Quá nhiều lần xác thực hủy đơn. Vui lòng thử lại sau.' }
+});
+module.exports = { authLimiter, otpLimiter, contactLimiter, cancelOtpVerifyLimiter };

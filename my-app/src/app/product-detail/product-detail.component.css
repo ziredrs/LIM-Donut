@@ -3,6 +3,12 @@
   font-family: 'Montserrat', sans-serif;
 }
 
+.product-detail-page > section {
+  width: 100%;
+  max-width: none;
+  margin-inline: auto;
+}
+
 /* ===== Flash Sale / Giờ vàng ===== */
 .flash-detail-banner {
   display: inline-flex;
@@ -51,6 +57,7 @@
 /* ===== Image Gallery (custom) ===== */
 .product-gallery {
   max-width: 450px;
+  margin-inline: auto;
 }
 
 .main-image {

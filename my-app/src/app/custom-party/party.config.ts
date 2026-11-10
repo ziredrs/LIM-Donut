@@ -78,7 +78,6 @@ export const SHAPES: ShapeOption[] = [
   { id: 'square',   name: 'Vuông',      icon: 'bi-square',   geometry: 'square',  available: true },
   { id: 'heart',    name: 'Trái tim',   icon: 'bi-heart',    geometry: 'heart',   available: true },
   { id: 'star',     name: 'Ngôi sao',   icon: 'bi-star',     geometry: 'star',    available: true },
-  { id: 'hexagon',  name: 'Lục giác',   icon: 'bi-hexagon',  geometry: 'hexagon', available: true },
 ];
 
 export const FLAVORS: FlavorOption[] = [

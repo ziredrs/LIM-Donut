@@ -1,5 +1,5 @@
 node_modules/
 backend/.env
+backend/backups/
 backend/uploads/*
 !backend/uploads/.gitkeep
-.claude/

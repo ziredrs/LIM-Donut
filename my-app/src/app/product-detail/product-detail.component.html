@@ -1,7 +1,7 @@
 @if (product) {
 <main class="product-detail-page container py-4">
   <div class="breadcrumb-custom rounded p-3 text-center mb-4">
-    <a routerLink="/">Trang chủ</a> / <a routerLink="/menu">Menu Donut</a> / <span class="fw-bold">{{ product?.categories?.[0] }}</span>
+    <a routerLink="/">Trang chủ</a> / <a routerLink="/menu">Menu Donut</a> / <span class="fw-bold">{{ product.categories[0] }}</span>
   </div>
 
   <section class="row g-4 bg-white rounded-3 shadow-sm p-4 mb-4">
@@ -9,7 +9,7 @@
     <div class="col-lg-5">
       <div class="product-gallery">
         <div class="main-image" [style.opacity]="productService.isOutOfStock(product) ? 0.4 : 1" style="position:relative;">
-          <img [src]="mainImage | imgUrl" [alt]="product?.name" />
+          <img [src]="mainImage | imgUrl" [alt]="product.name" />
           @if (productService.isOutOfStock(product)) {
             <span class="badge bg-secondary position-absolute top-0 start-0 m-2" style="font-size:0.85rem;z-index:2;"><i class="bi bi-x-circle-fill"></i> Hết hàng hôm nay</span>
           } @else if (productService.isLowStock(product)) {
@@ -30,14 +30,14 @@
 
     <!-- Right Column: Details & Options -->
     <div class="col-lg-7">
-      <span class="text-muted small">{{ product?.categories?.[0] }}</span>
-      <h1 class="product-title fs-2 fw-bold mt-1 mb-2">{{ product?.name }}</h1>
+      <span class="text-muted small">{{ product.categories[0] }}</span>
+      <h1 class="product-title fs-2 fw-bold mt-1 mb-2">{{ product.name }}</h1>
       <div class="d-flex align-items-center gap-2 mb-3 small">
         <span class="stars text-warning">
-          @for (star of [].constructor(product?.rating); track $index) { <i class="bi bi-star-fill"></i> }
+          @for (star of [].constructor(product.rating); track $index) { <i class="bi bi-star-fill"></i> }
         </span>
-        <span class="fw-bold">{{ product?.rating }}.0</span>
-        <span class="text-muted">({{ product?.reviews }} lượt đánh giá)</span>
+        <span class="fw-bold">{{ reviewAverage().toFixed(1) }}</span>
+        <span class="text-muted">({{ reviews().length }} lượt đánh giá)</span>
         <span class="sold-proof"><i class="bi bi-bag-check-fill"></i> đã bán {{ soldLabel }}</span>
         @if (productService.isOutOfStock(product)) {
           <span class="text-secondary fw-bold"><i class="bi bi-x-circle-fill"></i> Hết hàng</span>
@@ -83,7 +83,7 @@
       </div>
 
       <div class="product-desc text-muted mb-3">
-        <p>{{ product?.description }}. Sự kết hợp hoàn hảo giữa cốt bánh mềm mịn và lớp phủ thượng hạng tạo nên chiếc Donut tuyệt vời. Thưởng thức ngay để cảm nhận hương vị đặc trưng và hậu vị lôi cuốn.</p>
+        <p>{{ product.description }}. Sự kết hợp hoàn hảo giữa cốt bánh mềm mịn và lớp phủ thượng hạng tạo nên chiếc Donut tuyệt vời. Thưởng thức ngay để cảm nhận hương vị đặc trưng và hậu vị lôi cuốn.</p>
         <button class="btn btn-link text-dark fw-bold p-0 text-decoration-underline">Chú thích sản phẩm tại đây <span>v</span></button>
       </div>
 
@@ -104,7 +104,7 @@
           <div class="mb-4">
             <h4 class="option-title text-primary mb-2 fs-6">Topping thêm</h4>
             <div class="topping-list">
-            @for (t of product?.toppings; track t.name) {
+            @for (t of product.toppings; track t.name) {
               <div class="topping-item" [class.has-topping]="getToppingQuantity(t.name) > 0">
                 <div class="topping-info">
                   <span class="topping-name fw-semibold">{{ t.name }}</span>
@@ -153,10 +153,13 @@
               <i class="bi bi-cart"></i> Thêm vào giỏ
             </button>
             <button class="btn btn-primary rounded-pill fw-bold px-4 py-2 flex-shrink-0" [disabled]="productService.isOutOfStock(product) || ((product.id === 99 || product.id === 100) && totalBoxDonutsCount !== maxBoxDonutsCapacity)" (click)="buyNow()">Mua ngay</button>
-            <button class="btn rounded-pill px-3 py-2 detail-fav-btn" [class.favorited]="isFavorite()" (click)="toggleFavorite()" title="Yêu thích">
+            <button type="button" class="btn rounded-pill px-3 py-2 detail-fav-btn" [disabled]="authService.favoritePending()" [attr.aria-pressed]="isFavorite()" [class.favorited]="isFavorite()" (click)="toggleFavorite()" title="Yêu thích">
               <i class="bi" [ngClass]="isFavorite() ? 'bi-heart-fill' : 'bi-heart'"></i>
             </button>
           </div>
+          @if (authService.favoriteError()) {
+            <div class="alert alert-danger mt-3" role="alert">{{ authService.favoriteError() }} <a routerLink="/login">Đăng nhập</a></div>
+          }
         </div>
       </div>
     </div>
@@ -306,7 +309,7 @@
           <div class="row g-3">
             <div class="col-md-6">
               <div class="d-flex flex-column">
-                <span class="text-muted small mb-1">Tên sản phẩm:</span> <span class="fw-medium">{{ product?.name }}</span>
+                <span class="text-muted small mb-1">Tên sản phẩm:</span> <span class="fw-medium">{{ product.name }}</span>
               </div>
             </div>
             <div class="col-md-6">
@@ -402,57 +405,19 @@
         <div class="reviews-container">
           <div class="rating-summary d-flex bg-light rounded-3 border p-4 gap-4 align-items-center mb-4">
             <div class="text-center pe-4 border-end">
-              <div class="big-score fs-1 fw-bold">{{ product?.rating }}.0 <span class="small-text fs-6 text-muted fw-normal">out of 5</span></div>
-              <div class="stars-row text-warning fs-4 my-2"><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i></div>
-              <div class="text-muted small">({{ product?.reviews }} lượt đánh giá)</div>
+              <div class="big-score fs-1 fw-bold">{{ reviewAverage().toFixed(1) }} <span class="small-text fs-6 text-muted fw-normal">out of 5</span></div>
+              <div class="stars-row text-warning fs-4 my-2">@for (star of [1, 2, 3, 4, 5]; track star) { <i class="bi" [class.bi-star-fill]="star <= reviewAverage()" [class.bi-star]="star > reviewAverage()"></i> }</div>
+              <div class="text-muted small">({{ reviews().length }} lượt đánh giá)</div>
             </div>
             <div class="flex-grow-1 d-flex flex-column gap-2">
               @for (star of [5, 4, 3, 2, 1]; track star) {
                 <div class="d-flex align-items-center gap-3">
                   <span class="small text-muted" style="min-width:50px;">{{ star }} sao</span>
                   <div class="bar-bg flex-grow-1">
-                    <div class="bar-fill" [style.width.%]="star === 5 ? 80 : (star === 4 ? 15 : 5)"></div>
+                    <div class="bar-fill" [style.width.%]="reviewPercent(star)"></div>
                   </div>
                 </div>
               }
-            </div>
-          </div>
-
-          <div class="review-form-section">
-            <h3 class="fs-5 mb-3">Đánh giá sản phẩm</h3>
-            <div class="card">
-              <div class="card-body p-4">
-                <div class="d-flex align-items-center gap-3 mb-2 fw-semibold text-muted">
-                  <span>Chất lượng sản phẩm:</span>
-                  <span class="stars-input">
-                    @for (i of [1,2,3,4,5]; track i) {
-                      <i class="bi" [class.bi-star-fill]="selectedRating() >= i" [class.bi-star]="selectedRating() < i" style="cursor:pointer;color:#ffc107;font-size:1.3rem;" (click)="setRating(i)"></i>
-                    }
-                  </span>
-                </div>
-
-                <div class="d-flex flex-wrap gap-2 mb-3">
-                  @for (s of suggestedReviews; track s) {
-                    <button class="suggestion-tag" (click)="addSuggestion(s)">+ {{ s }}</button>
-                  }
-                </div>
-
-                <div class="mb-3">
-                  <input type="text" placeholder="Để lại đánh giá chi tiết tại đây" class="form-control">
-                </div>
-                <div class="mb-3">
-                  <textarea placeholder="Hãy để lại nhận xét cho sản phẩm này bạn nhé! LIMDonut xin chân thành cảm ơn."
-                    class="form-control" rows="4" [(ngModel)]="reviewComment"></textarea>
-                </div>
-                @if (reviewSuccessMessage()) {
-                  <div class="alert alert-success py-2 rounded-3 small"><i class="bi bi-check-circle-fill"></i> {{ reviewSuccessMessage() }}</div>
-                }
-                <div class="d-flex justify-content-end">
-                  <button class="btn btn-primary rounded-pill fw-bold px-4" [disabled]="!reviewComment.trim() || isSubmittingReview()" (click)="submitReview()">
-                    {{ isSubmittingReview() ? 'Đang gửi...' : 'Đánh giá' }}
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -466,6 +431,7 @@
                     <div class="d-flex justify-content-between align-items-center mb-1">
                       <div class="d-flex align-items-center gap-2">
                         <strong class="small">{{ r.userName }}</strong>
+                        @if (!r.isDemo) { <span class="small text-success"><i class="bi bi-patch-check-fill"></i> Đã mua hàng</span> }
                         <span class="text-warning small">
                           @for (s of [1,2,3,4,5]; track s) {
                             <i class="bi" [class.bi-star-fill]="r.rating >= s" [class.bi-star]="r.rating < s"></i>
@@ -479,6 +445,8 @@
                 </div>
               }
             </div>
+          } @else {
+            <p class="text-muted text-center py-3">Chưa có đánh giá từ khách hàng đã mua sản phẩm.</p>
           }
         </div>
       }

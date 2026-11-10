@@ -1,3 +1,14 @@
+const { reserveInventory } = require('../utils/reserve-inventory');
+const { withReviewState } = require('../utils/order-review');
+const { cancellationDetails } = require('../utils/cancellation');
+const crypto = require('crypto');
+const OrderCancelOtp = require('../models/OrderCancelOtp');
+const { otpLimiter, cancelOtpVerifyLimiter } = require('../middleware/rateLimiters');
+const { otpDigest, canCancelOrder, sendCancelSms, cancelSmsConfigured, localDemoEnabled } = require('../utils/cancel-otp');
+const { stockProductsPipeline } = require('../utils/stock-products');
+const { saveOrderStatus } = require('../utils/order-status');
+const mongoose = require('mongoose');
+const Branch = require('../models/Branch');
 const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
@@ -22,13 +33,15 @@ const EXCEPTION_STATUSES = ['Thanh toán thất bại', 'Giao thất bại', 'Kh
 const TERMINAL_STATUSES = ['Hoàn thành', ...EXCEPTION_STATUSES];
 
 router.use(optionalAuth);
+router.use('/:id/delivery-change', require('./delivery-change'));
+router.use('/:id/edit', require('./order-edit'));
 
 router.get('/', async (req, res) => {
   try {
     if (req.query.mine === 'true') {
       if (!req.userId) return res.status(401).json({ message: 'Vui lòng đăng nhập để xem đơn hàng.' });
       const orders = await Order.find({ userId: req.userId }).sort({ createdAt: -1 });
-      return res.json(orders);
+      return res.json(await withReviewState(orders));
     }
     if (req.query.all === 'true') {
       return requireAdmin(req, res, async () => {
@@ -63,7 +76,7 @@ router.get('/lookup', async (req, res) => {
         { 'customerInfo.name': { $regex: new RegExp(patternNFD, 'i') } }
       ]
     }).sort({ createdAt: -1 });
-    res.json(orders);
+    res.json(await withReviewState(orders));
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server!' });
   }
@@ -72,6 +85,13 @@ router.get('/lookup', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const data = { ...req.body };
+    delete data.cancellation;
+    delete data.deliveryChangeHistory;
+    delete data.orderEditHistory;
+    delete data.deliveryDistanceKm;
+    data.deliveryRevision = 0;
+    data.starsUsed = 0;
+    data.voucherConsumed = false;
     if (req.userId) data.userId = req.userId;
 
     // Validate input
@@ -84,6 +104,10 @@ router.post('/', async (req, res) => {
     }
 
     const isCustomParty = data.orderType === 'custom';
+    if (!mongoose.isValidObjectId(data.branchId)) return res.status(400).json({ message: 'Vui lòng chọn chi nhánh xử lý đơn.' });
+    const branch = await Branch.findOne({ _id: data.branchId, active: true });
+    if (!branch) return res.status(400).json({ message: 'Chi nhánh không còn hoạt động.' });
+    data.branchName = branch.name;
 
     if (!isCustomParty) {
       if (!Array.isArray(data.items) || data.items.length === 0) {
@@ -133,19 +157,6 @@ router.post('/', async (req, res) => {
     const starsToUse = parseInt(data.starsToUse) || 0;
     delete data.starsToUse;
 
-    if (starsToUse > 0 && req.userId) {
-      const user = await User.findById(req.userId);
-      if (!user || (user.stars || 0) < starsToUse) {
-        return res.status(400).json({ message: 'Không đủ Lịm Star.' });
-      }
-      const maxStars = Math.floor(data.totalAmount * 0.3);
-      const actualStars = Math.min(starsToUse, maxStars);
-      user.stars -= actualStars;
-      user.starsHistory.push({ amount: -actualStars, reason: `Dùng Star cho đơn ${data.orderId}`, at: new Date() });
-      await user.save();
-      data.starsUsed = actualStars;
-    }
-
     // Retry up to 3 times on duplicate orderId
     let newOrder;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -153,8 +164,35 @@ router.post('/', async (req, res) => {
         if (attempt > 0) {
           data.orderId = 'DH-' + Math.floor(1000000 + Math.random() * 9000000);
         }
-        newOrder = new Order(data);
-        await newOrder.save();
+        const session = await mongoose.startSession();
+        try {
+          await session.withTransaction(async () => {
+            if (starsToUse > 0 && req.userId) {
+              const user = await User.findById(req.userId).session(session);
+              if (!user || (user.stars || 0) < starsToUse) {
+                throw Object.assign(new Error('Không đủ Lịm Star.'), { status: 400 });
+              }
+              const maxStars = Math.floor(data.totalAmount * 0.3);
+              const actualStars = Math.min(starsToUse, maxStars);
+              user.stars -= actualStars;
+              user.starsHistory.push({ amount: -actualStars, reason: `Dùng Star cho đơn ${data.orderId}`, at: new Date() });
+              await user.save({ session });
+              data.starsUsed = actualStars;
+            }
+
+            if (!isCustomParty) {
+              await reserveInventory(branch._id, data.items, session);
+            }
+            if (data.voucherCode) {
+              const used = await Voucher.updateOne({ code: data.voucherCode, active: true, $expr: { $or: [{ $eq: ['$usageLimit', null] }, { $lt: ['$usedCount', '$usageLimit'] }] } }, { $inc: { usedCount: 1 } }, { session });
+              if (!used.modifiedCount) throw Object.assign(new Error('Mã giảm giá không còn lượt sử dụng.'), { status: 409 });
+              data.voucherConsumed = true;
+            }
+            data.inventoryDeducted = !isCustomParty;
+            newOrder = new Order(data);
+            await newOrder.save({ session });
+          });
+        } finally { await session.endSession(); }
         break;
       } catch (saveErr) {
         if (saveErr.code === 11000 && attempt < 2) continue;
@@ -162,35 +200,10 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Tăng lượt dùng voucher sau khi đơn tạo thành công
-    if (data.voucherCode) {
-      try {
-        await Voucher.updateOne({ code: data.voucherCode }, { $inc: { usedCount: 1 } });
-      } catch (e) { /* non-blocking */ }
-    }
-
-    // Trừ tồn kho thật + cộng số đã bán cho từng món (không áp dụng cho Custom Party)
-    if (!isCustomParty) {
-      try {
-        for (const item of data.items) {
-          // item.id có dạng "12_{...options}" — lấy id số ở đầu
-          const productId = parseInt(String(item.id).split('_')[0], 10);
-          const qty = parseInt(item.quantity) || 0;
-          if (!productId || qty <= 0) continue;
-          const product = await Product.findOne({ id: productId });
-          if (product) {
-            product.stock = Math.max(0, (product.stock || 0) - qty);
-            product.sold = (product.sold || 0) + qty;
-            await product.save();
-          }
-        }
-      } catch (e) { /* không chặn tạo đơn nếu cập nhật kho lỗi */ }
-    }
-
     res.status(201).json(newOrder);
   } catch (err) {
     console.error('Create order error:', err);
-    res.status(500).json({ message: 'Lỗi không thể tạo đơn hàng!', error: err.message });
+    res.status(err.status || 500).json({ message: err.status ? err.message : 'Lỗi không thể tạo đơn hàng!', error: err.message });
   }
 });
 
@@ -221,7 +234,7 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
     order.status = newStatus;
     if (evidencePhotoUrl) order.evidencePhotoUrl = evidencePhotoUrl;
     order.statusHistory.push({ status: newStatus, at: new Date() });
-    await order.save();
+    await saveOrderStatus(order, current);
 
     // Award stars on completion
     if (newStatus === 'Hoàn thành' && order.userId) {
@@ -271,8 +284,8 @@ router.get('/stats', requireAdmin, async (req, res) => {
       Product.find().sort({ sold: -1 }).limit(5).select('id name image sold price'),
       Complaint.countDocuments({ status: 'Chờ xử lý' }),
       ContactMessage.countDocuments({ status: 'Chưa xử lý' }),
-      Product.find({ stock: { $gt: 0, $lt: 5 } }).select('id name stock image'),
-      Product.countDocuments({ stock: 0 }),
+      Product.aggregate([...stockProductsPipeline(), { $match: { stock: { $gt: 0, $lt: 5 } } }, { $project: { id: 1, name: 1, stock: 1, image: 1 } }]),
+      Product.aggregate([...stockProductsPipeline(), { $match: { stock: 0 } }, { $count: 'count' }]).then(rows => rows[0]?.count || 0),
       Order.find().sort({ createdAt: -1 }).limit(5).select('orderId customerInfo totalAmount status createdAt'),
       Order.aggregate([
         { $match: { status: 'Hoàn thành', createdAt: { $gte: new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000) } } },
@@ -311,27 +324,70 @@ router.get('/stats', requireAdmin, async (req, res) => {
   }
 });
 
-router.patch('/:id/cancel', async (req, res) => {
+router.post('/:id/cancel-otp', otpLimiter, async (req, res) => {
+  let digest;
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Đơn hàng không hợp lệ.' });
+    const order = await Order.findById(req.params.id);
+    const phone = String(req.body.phone || '').trim();
+    const name = String(req.body.name || '').normalize('NFC').trim().toLocaleLowerCase('vi-VN');
+    if (!order || phone !== order.customerInfo.phone || name !== String(order.customerInfo.name).normalize('NFC').trim().toLocaleLowerCase('vi-VN'))
+      return res.status(400).json({ message: 'Thông tin đặt hàng không khớp.' });
+    if (!canCancelOrder(order)) return res.status(403).json({ message: 'Chỉ đơn hàng thuộc nhóm Đang xử lý mới có thể hủy.' });
+    const demo = localDemoEnabled(req);
+    if (process.env.CANCEL_OTP_DEMO === 'true' && !demo) return res.status(403).json({ message: 'OTP demo chỉ được sử dụng trên local, không qua proxy và không ở production.' });
+    if (!demo && !cancelSmsConfigured())
+      return res.status(503).json({ message: 'Chưa cấu hình dịch vụ gửi SMS OTP. Vui lòng liên hệ cửa hàng.' });
+    const code = String(crypto.randomInt(0, 10000)).padStart(4, '0');
+    digest = otpDigest(order._id, phone, code);
+    const now = new Date();
+    try {
+      await OrderCancelOtp.findOneAndUpdate({ orderId: order._id, sentAt: { $lte: new Date(now.getTime() - 60000) } }, {
+        $set: { phone, digest, expiresAt: new Date(now.getTime() + 300000), sentAt: now, attempts: 0, ready: false, isDemo: demo }
+      }, { upsert: true, new: true });
+    } catch (err) {
+      if (err.code === 11000) return res.status(429).json({ message: 'Vui lòng chờ 60 giây trước khi gửi lại OTP.' });
+      throw err;
+    }
+    if (!demo) await sendCancelSms(order.customerInfo.phone, code);
+    await OrderCancelOtp.updateOne({ orderId: order._id, digest }, { $set: { ready: true } });
+    res.json({ message: demo ? 'OTP demo trên local, không gửi SMS.' : 'Đã gửi OTP đến số điện thoại đặt hàng.', maskedPhone: phone.slice(0, 3) + '****' + phone.slice(-3), expiresIn: 300, retryAfter: 60, ...(demo ? { demoCode: code, isDemo: true } : {}) });
+  } catch (err) {
+    if (digest) await OrderCancelOtp.deleteOne({ orderId: req.params.id, digest }).catch(() => {});
+    res.status(err.status || 500).json({ message: err.status ? err.message : 'Không gửi được OTP. Vui lòng thử lại.' });
+  }
+});
+
+router.patch('/:id/cancel', cancelOtpVerifyLimiter, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Đơn hàng không hợp lệ.' });
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Không tìm thấy đơn hàng.' });
-
-    if (order.orderType === 'custom') {
-      if (!order.cancelDeadline || new Date() >= new Date(order.cancelDeadline)) {
-        return res.status(403).json({ message: 'Đã quá mốc khóa, không thể hủy.' });
-      }
-    } else {
-      if (order.status !== 'Đã đặt') {
-        return res.status(403).json({ message: 'Đơn đã được xác nhận, không thể tự hủy.' });
-      }
+    let otpProof = null;
+    if (!canCancelOrder(order)) return res.status(403).json({ message: 'Chỉ đơn hàng thuộc nhóm Đang xử lý mới có thể hủy.' });
+    const cancellation = cancellationDetails(req.body.reason, req.body.note);
+    const isOwner = req.userId && order.userId && String(req.userId) === String(order.userId);
+    if (!isOwner || req.body.otp !== undefined) {
+      if (typeof req.body.otp !== 'string' || !/^\d{4}$/.test(req.body.otp))
+        return res.status(400).json({ message: 'Vui lòng nhập đúng 4 chữ số OTP.' });
+      const challenge = await OrderCancelOtp.findOneAndUpdate({ orderId: order._id, ready: true, phone: order.customerInfo.phone,
+        ...(!localDemoEnabled(req) ? { isDemo: { $ne: true } } : {}),
+        expiresAt: { $gt: new Date() }, attempts: { $lt: 5 } }, { $inc: { attempts: 1 } }, { new: true });
+      const supplied = otpDigest(order._id, order.customerInfo.phone, req.body.otp);
+      if (!challenge || !crypto.timingSafeEqual(Buffer.from(challenge.digest, 'hex'), Buffer.from(supplied, 'hex')))
+        return res.status(400).json({ message: 'OTP không đúng, đã hết hạn hoặc đã vượt quá 5 lần thử.' });
+      otpProof = challenge;
     }
+    if (!canCancelOrder(order)) return res.status(403).json({ message: 'Chỉ đơn hàng thuộc nhóm Đang xử lý mới có thể hủy.' });
 
+    const oldStatus = order.status;
     order.status = 'Đã hủy';
-    order.statusHistory.push({ status: 'Đã hủy', at: new Date() });
-    await order.save();
+    order.cancellation = cancellation;
+    order.statusHistory.push({ status: 'Đã hủy', at: cancellation.at });
+    await saveOrderStatus(order, oldStatus, otpProof);
     res.json(order);
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi server!', error: err.message });
+    res.status(err.status || 500).json({ message: err.status ? err.message : 'Lỗi server!', error: err.message });
   }
 });
 

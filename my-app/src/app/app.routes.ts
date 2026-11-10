@@ -17,6 +17,7 @@ import { AboutComponent } from './about/about.component';
 import { FavoritesComponent } from './favorites/favorites.component';
 import { MoMoPaymentComponent } from './payment-momo/payment-momo.component';
 import { VNPayPaymentComponent } from './payment-vnpay/payment-vnpay.component';
+import { PolicyTerms } from './policy-terms/policy-terms';
 
 export const routes: Routes = [
   { path: '', component: HomepageComponent },
@@ -35,6 +36,7 @@ export const routes: Routes = [
   { path: 'login', component: Login },
   { path: 'forgot-password', component: ForgotPassword },
   { path: 'profile', component: Profile },
+  { path: 'policy-terms', component: PolicyTerms, title: 'Chính sách & điều khoản | Lịm Donut' },
   { path: 'tra-cuu-don-hang', component: OrderLookupComponent },
   { path: 'about', component: AboutComponent },
   { path: 'yeu-thich', component: FavoritesComponent }

@@ -1,3 +1,4 @@
+@import '../shared-banner.css';
 /* Menu Page Styles */
 :host {
   display: block;
@@ -9,39 +10,10 @@
 }
 
 /* Banner */
-.menu-banner {
-  background-color: #e6f0fa;
-  padding: 2.25rem 0;
-  border-radius: 0 0 20px 20px;
-}
 
-.menu-banner-content {
-  padding-right: 2rem;
-}
 
-.menu-banner-content .subtitle {
-  color: var(--color-steel-blue);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 0.25rem;
-  display: block;
-  font-size: 0.85rem;
-}
 
-.menu-banner-content .title {
-  font-size: 2rem;
-  color: #333;
-  margin-bottom: 0.5rem;
-  line-height: 1.2;
-}
 
-.menu-banner-content .desc {
-  font-size: 0.95rem;
-  color: #666;
-  line-height: 1.5;
-  margin-bottom: 0;
-}
 
 .menu-banner-image {
   max-height: 320px;
@@ -63,7 +35,7 @@
 
 .search-sort-bar {
   background: #fff;
-  padding: 0.5rem 1.5rem;
+  padding: 1rem 1.5rem;
   border-radius: 30px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
   margin-bottom: 1.5rem;
@@ -73,6 +45,8 @@
   display: flex;
   align-items: center;
   flex: 1;
+  max-width: 440px;
+  margin: 0 auto;
 }
 
 .search-icon {
@@ -115,6 +89,13 @@
   display: flex;
   align-items: center;
   color: #666;
+  justify-content: center;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+@media (max-width: 767.98px) {
+  .search-sort-bar { row-gap: 0.75rem; }
 }
 
 .sort-box label {
@@ -293,6 +274,15 @@
 /* Grid now handled by Bootstrap row g-4 */
 
 /* Newsletter */
+.email-input-group {
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.email-input-group input {
+  border-radius: inherit;
+}
+
 .menu-subscription-section {
   padding: 4rem 0 2rem;
   margin-top: 2rem;

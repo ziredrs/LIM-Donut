@@ -3,6 +3,15 @@
   display: block;
 }
 
+.email-input-group {
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.email-input-group input {
+  border-radius: inherit;
+}
+
 /* Combo Box Section Styles */
 .combo-box-section {
   padding: 80px 5%;
@@ -124,7 +133,6 @@
   }
 }
 
-/* ===== Flash Sale / Giờ vàng ===== */
 .flash-banner {
   display: flex;
   align-items: center;

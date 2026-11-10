@@ -36,7 +36,9 @@
   font-size: 2.8rem;
   font-weight: 800;
   color: #2d3436;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  text-wrap: balance;
   margin-bottom: 10px;
 }
 
@@ -116,4 +118,33 @@
   .login-card {
     padding: 30px;
   }
+}
+
+.login-notice {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 32px;
+  border: none;
+  border-radius: 24px;
+  text-align: center;
+  color: #2d3436;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+.login-notice::backdrop { background: rgba(0, 0, 0, 0.4); }
+.login-notice h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 16px; }
+.login-notice p { line-height: 1.6; }
+.login-notice button { min-width: 120px; }
+.login-form .form-control.is-invalid { border-color: #dc3545; }
+
+/* Notify Angular when Chromium fills an input without an input event. */
+@keyframes login-autofill {
+  from { opacity: 1; }
+  to { opacity: 1; }
+}
+.login-form input:-webkit-autofill {
+  animation-name: login-autofill;
+  animation-duration: 0.01s;
 }

@@ -1,4 +1,12 @@
 <h2 class="page-title">Sản phẩm</h2>
+<div class="mb-3">
+  <label for="inventoryBranch" class="admin-form-label">Quản lý tồn kho theo chi nhánh</label>
+  <select id="inventoryBranch" class="admin-form-control" [ngModel]="service.branchId()" (ngModelChange)="service.branchId.set($event); service.fetchInventory()">
+    <option value="">Tổng tồn kho các chi nhánh (chỉ xem)</option>
+    @for (branch of service.branches(); track branch._id) { <option [value]="branch._id">{{ branch.name }}</option> }
+  </select>
+  <p class="text-muted small">Kho chưa nhập được tính là 0. Chọn chi nhánh và mở sản phẩm để cập nhật số lượng thực tế.</p>
+</div>
 
 <div class="d-flex gap-2 mb-3 align-items-center flex-wrap">
   <button class="btn-add" (click)="showAddForm.set(!showAddForm())">
@@ -52,7 +60,7 @@
       </div>
       <div class="col-md-2">
         <label class="admin-form-label">Tồn kho</label>
-        <input type="number" class="admin-form-control" [(ngModel)]="newProduct.stock">
+        <p class="small text-muted">Nhập riêng từng chi nhánh sau khi tạo sản phẩm.</p>
       </div>
       <div class="col-md-2">
         <label class="admin-form-label">Hình ảnh</label>
@@ -111,7 +119,7 @@
             @if (p.flashSale) { <span class="badge bg-danger ms-1" style="font-size:0.65rem;"><i class="bi bi-lightning-fill"></i></span> }
           </td>
           <td>{{ p.price }}</td>
-          <td [class.text-danger]="p.stock < 5" [class.fw-bold]="p.stock < 5">{{ p.stock }}</td>
+          <td>{{ service.branchId() ? (service.inventory()[p.id] || 0) : p.stock }}</td>
           <td class="text-end">
             <button class="icon-btn" (click)="openDetail(p)" title="Sửa"><i class="bi bi-pencil-square"></i></button>
             <button class="icon-btn text-danger" (click)="remove(p)" title="Xóa"><i class="bi bi-x-circle"></i></button>
@@ -160,7 +168,9 @@
             </div>
             <div class="col-md-4">
               <label class="admin-form-label">Tồn kho</label>
-              <input type="number" class="admin-form-control" [(ngModel)]="ep.stock" min="0">
+              <input #branchStock type="number" class="admin-form-control" [value]="service.branchId() ? (service.inventory()[ep.id] || 0) : ep.stock" [disabled]="!service.branchId()" min="0" step="1">
+              <button type="button" class="btn btn-primary mt-2" [disabled]="!service.branchId() || ep.id === 99 || ep.id === 100" (click)="service.saveStock(ep.id, +branchStock.value)">Lưu tồn kho chi nhánh</button>
+              @if (ep.id === 99 || ep.id === 100) { <p class="small text-muted">Combo dùng kho từng bánh bên trong.</p> }
             </div>
             <div class="col-md-8">
               <label class="admin-form-label">Danh mục</label>

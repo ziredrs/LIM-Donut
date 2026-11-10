@@ -80,6 +80,7 @@
                       <span class="text-muted">— cách {{ distanceKm() }} km</span>
                       <span *ngIf="shippingFee > 0"> — Phí ship: {{ formatPrice(shippingFee) }}</span>
                       <span *ngIf="shippingFee === 0" class="text-success fw-semibold"> — Freeship!</span>
+                      @if (addressLocationApproximate()) { <div class="small text-muted">Vị trí ước tính theo đường/ngõ, chưa định vị chính xác số nhà.</div> }
                     </div>
                   </div>
                   <div class="alert alert-warning py-2 px-3 rounded-3 small mb-0" *ngIf="geocodingError() && !geocodingActive()">
@@ -114,10 +115,9 @@
 
             <div class="mb-3">
               <label class="form-label fw-semibold">{{ deliveryMethod() === 'pickup' ? 'Chi nhánh lấy hàng' : 'Chi nhánh giao hàng' }} <span class="text-danger">*</span></label>
-              <select class="form-select" [ngModel]="branch()" (ngModelChange)="branch.set($event)">
+              <select class="form-select" [ngModel]="branch()" (ngModelChange)="selectBranch($event)">
                 <option value="" disabled selected>Chọn chi nhánh</option>
-                <option value="chinhanh1">Chi nhánh 1: 107-B9 P. Tô Hiệu</option>
-                <option value="chinhanh2">Chi nhánh 2: 44 P. Thợ Nhuộm</option>
+                @for (b of branches(); track b._id) { <option [value]="b._id">{{ b.name }}: {{ b.address }}</option> }
               </select>
             </div>
           </div>
@@ -130,12 +130,18 @@
           <div class="card-body p-4">
             <div class="cart-header">
               <h2 class="section-title mb-0 border-0 pb-0">Giỏ hàng của bạn</h2>
-              <span class="item-count badge">{{ cartService.totalItems() }} món</span>
+              <span class="item-count badge">{{ selectedItemCount }} món</span>
             </div>
 
+            @if (stockMessage()) { <p class="text-danger" role="alert">{{ stockMessage() }}</p> }
+            @if (branch() && stockReady() && !branchHasStock) { <p class="text-danger" role="alert">Chi nhánh đã chọn chưa đủ hàng cho các món được chọn. Vui lòng giảm số lượng hoặc chọn chi nhánh khác.</p> }
             <div class="cart-items">
               @for (item of cartService.items(); track item.id) {
                 <div class="cart-item">
+                  <input type="checkbox" class="cart-item-checkbox"
+                    [checked]="item.selected !== false"
+                    (change)="cartService.toggleSelection(item.id); removeVoucher()"
+                    [attr.aria-label]="'Chọn thanh toán ' + item.name">
                   <div class="item-img" [routerLink]="['/product', item.productId]">
                     <img [src]="item.image | imgUrl" [alt]="item.name">
                   </div>
@@ -330,11 +336,11 @@
 
             <div class="form-check terms-check mb-4">
               <input class="form-check-input" type="checkbox" id="terms" [ngModel]="agreedToTerms()" (ngModelChange)="agreedToTerms.set($event)">
-              <label class="form-check-label" for="terms">Tôi đã đọc, hiểu và đồng ý với tất cả các điều khoản, điều kiện và chính sách liên quan <span class="text-danger">*</span></label>
+              <label class="form-check-label" for="terms">Tôi đã đọc, hiểu và đồng ý với tất cả các <a routerLink="/policy-terms" target="_blank" rel="noopener" class="terms-policy-link">điều khoản, điều kiện và chính sách liên quan</a> <span class="text-danger">*</span></label>
             </div>
 
             @if (orderClassification().orderType === 'small') {
-              <button class="checkout-btn btn btn-primary btn-lg w-100" [disabled]="!isFormValid" (click)="placeOrder()">Kiểm tra đơn hàng</button>
+              <button class="checkout-btn btn btn-primary btn-lg w-100" [disabled]="!isFormValid" (click)="placeOrder()">Đặt hàng</button>
             } @else {
               <button class="checkout-btn btn btn-primary btn-lg w-100" [disabled]="!isFormValid" (click)="placeOrder()">
                 {{ paymentSplit() === 'full' ? 'Thanh toán ' + formatPrice(total) : 'Đặt cọc ' + formatPrice(orderClassification().depositAmount) }}
@@ -359,12 +365,15 @@
           <div class="row g-3 mb-4">
             <div class="col-sm-6">
               <label class="form-label fw-semibold">Ngày nhận hàng</label>
-              <input type="date" class="form-control" [ngModel]="selectedDate()" (ngModelChange)="selectedDate.set($event)" [min]="minDate">
+<div class="input-group">
+              <input type="text" class="form-control" placeholder="dd/mm/yyyy" maxlength="10" inputmode="numeric" [ngModel]="selectedDateText()" (ngModelChange)="changeSelectedDate($event)">
+<input type="date" class="form-control" style="flex: 0 0 48px; width:48px; color:transparent;" aria-label="Calendar" [ngModel]="selectedDate()" (ngModelChange)="changeSelectedDateFromCalendar($event)" [min]="minDate">
+</div>
             </div>
 
             <div class="col-sm-3">
               <label class="form-label fw-semibold">Giờ (24h)</label>
-              <select class="form-select" [ngModel]="selectedHour()" (ngModelChange)="selectedHour.set($event)">
+              <select class="form-select" [ngModel]="selectedHour()" (ngModelChange)="onHourChange($event)">
                 <option *ngFor="let h of hours" [value]="h">{{ h }}</option>
               </select>
             </div>
@@ -378,7 +387,7 @@
           </div>
 
           <div class="modal-note alert alert-light">
-            <p class="mb-0">Cửa hàng sẽ giao trong vòng +/- 30 phút quanh thời gian bạn chọn. Mặc định: giờ hiện tại.</p>
+            <p class="mb-0">Giờ nhận hàng: 07:00–21:00. Cửa hàng sẽ giao trong vòng +/- 30 phút quanh thời gian bạn chọn.</p>
             <p class="error-msg mb-0" *ngIf="timeError()">{{ timeError() }}</p>
           </div>
         </div>

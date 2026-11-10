@@ -1,13 +1,13 @@
 <main class="menu-page">
   <!-- Menu Banner -->
-  <section class="menu-banner">
+  <section class="site-banner site-banner-menu">
     <div class="container">
       <div class="row align-items-center">
         <div class="col-md-6">
-          <div class="menu-banner-content">
-            <span class="subtitle">MENU DONUT</span>
-            <h1 class="title">Thoải mái chọn món yêu thích của bạn</h1>
-            <p class="desc">Từ donut truyền thống, donut kem béo đến những công thức mới lạ - mọi chiếc bánh đều được
+          <div class="site-banner-content">
+            <span class="site-banner-subtitle">MENU DONUT</span>
+            <h1 class="site-banner-title">Thoải mái chọn món yêu thích của bạn</h1>
+            <p class="site-banner-desc">Từ donut truyền thống, donut kem béo đến những công thức mới lạ - mọi chiếc bánh đều được
               nướng mới mỗi ngày.</p>
           </div>
         </div>
@@ -37,8 +37,8 @@
   <!-- Filter & Search -->
   <section class="menu-filters-container">
     <div class="container">
-      <div class="search-sort-bar row g-3 align-items-center">
-        <div class="col-md-8">
+      <div class="search-sort-bar row gx-3 gy-0 align-items-center justify-content-center">
+        <div class="col-md-6">
           <div class="search-box">
             <span class="search-icon"><i class="bi bi-search"></i></span>
             <input type="text" class="form-control" placeholder="Tìm donut bạn muốn..." [(ngModel)]="searchTerm" />
@@ -47,7 +47,7 @@
             }
           </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-6">
           <div class="sort-box">
             <label>Sắp xếp:</label>
             <select class="form-select" [(ngModel)]="sortBy">
@@ -154,6 +154,9 @@
     <div class="container">
       <div class="menu-grid-container">
         <div class="result-count">{{ filteredProducts.length }} sản phẩm</div>
+        @if (authService.favoriteError()) {
+          <div class="alert alert-danger" role="alert">{{ authService.favoriteError() }} <a routerLink="/login">Đăng nhập</a></div>
+        }
         @if (filteredProducts.length === 0) {
         <div class="no-results text-center py-5">
           <span class="no-results-icon"><i class="bi bi-exclamation-circle text-secondary"
@@ -170,6 +173,7 @@
               <div class="seller-img" [style.opacity]="isOutOfStock(product) ? 0.4 : 1">
                 <img [src]="product.image | imgUrl" [alt]="product.name" />
                 <button class="fav-btn" [class.favorited]="isFavorite(product)"
+                  type="button" [disabled]="authService.favoritePending()" [attr.aria-pressed]="isFavorite(product)"
                   (click)="$event.stopPropagation(); toggleFavorite(product)" title="Yêu thích">
                   <i class="bi" [ngClass]="isFavorite(product) ? 'bi-heart-fill' : 'bi-heart'"></i>
                 </button>

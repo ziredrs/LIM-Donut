@@ -11,6 +11,7 @@ import { AuthService } from '../auth.service';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import { ImgUrlPipe } from '../img-url.pipe';
+import { PICKUP_HOURS, PICKUP_MINUTES, localDateValue, validPickupTime, displayPickupDate, parsePickupDate } from '../pickup-time.util';
 
 @Component({
   selector: 'app-checkout',
@@ -45,31 +46,47 @@ export class CheckoutComponent implements OnInit {
   voucherDiscount = signal(0);
   voucherMsg = signal('');
   voucherChecking = signal(false);
+  private voucherRequest = 0;
+
+  get selectedItemCount() {
+    return this.cartService.selectedItems().reduce((sum, item) => sum + item.quantity, 0);
+  }
 
   applyVoucher() {
     const code = this.voucherInput().trim().toUpperCase();
     if (!code || this.voucherChecking()) return;
+    const request = ++this.voucherRequest;
+    const subtotal = this.subtotal;
     this.voucherChecking.set(true);
     this.voucherMsg.set('');
     this.http.post<{ code: string; discount: number }>(`${environment.apiBase}/api/vouchers/validate`, {
       code, orderTotal: this.subtotal
     }).subscribe({
       next: res => {
+        if (request !== this.voucherRequest) return;
+        if (subtotal !== this.subtotal) { this.removeVoucher(); return; }
         this.appliedVoucherCode.set(res.code);
         this.voucherDiscount.set(res.discount);
         this.voucherMsg.set(`Áp dụng mã ${res.code} thành công!`);
         this.voucherChecking.set(false);
       },
       error: err => {
+        if (request !== this.voucherRequest) return;
         this.appliedVoucherCode.set('');
         this.voucherDiscount.set(0);
-        this.voucherMsg.set(err.error?.message || 'Mã giảm giá không hợp lệ.');
+        this.voucherMsg.set(err.status === 0
+          ? 'Không thể kết nối máy chủ để kiểm tra mã. Vui lòng thử lại.'
+          : err.status >= 500
+            ? 'Máy chủ đang gặp lỗi khi kiểm tra mã. Vui lòng thử lại sau.'
+            : err.error?.message || 'Không thể áp dụng mã giảm giá. Vui lòng kiểm tra lại.');
         this.voucherChecking.set(false);
       }
     });
   }
 
   removeVoucher() {
+    this.voucherRequest++;
+    this.voucherChecking.set(false);
     this.appliedVoucherCode.set('');
     this.voucherDiscount.set(0);
     this.voucherInput.set('');
@@ -82,6 +99,7 @@ export class CheckoutComponent implements OnInit {
   // Geocoding & suggestions state
   geocodingActive = signal(false);
   geocodingError = signal(false);
+  addressLocationApproximate = signal(false);
   nearestBranchSuggestion = signal<string>('');
   geocodedDistance = signal<number | null>(null);
   private geocodeTimeout: any = null;
@@ -93,6 +111,37 @@ export class CheckoutComponent implements OnInit {
   deliveryTime = signal('');
   notes = signal('');
   branch = signal('');
+  branches = signal<{ _id: string; name: string; address: string; active: boolean }[]>([]);
+  branchStock = signal<Record<number, number>>({});
+  stockReady = signal(false);
+  stockMessage = signal('');
+  private lastDeliveryCoordinates?: { lat: number; lng: number };
+  private branchChosenManually = false;
+  private addressRequestVersion = 0;
+
+  selectBranch(id: string, manual = true) {
+    if (manual) this.branchChosenManually = true;
+    this.branch.set(id);
+    this.stockReady.set(false);
+    this.branchStock.set({});
+    this.stockMessage.set('');
+    if (!id) return;
+    this.http.get<{ productId: number; stock: number }[]>(`${environment.apiBase}/api/inventory/${id}`).subscribe({
+      next: rows => { if (this.branch() === id) { this.branchStock.set(Object.fromEntries(rows.map(row => [row.productId, row.stock]))); this.stockReady.set(true); } },
+      error: () => { if (this.branch() === id) this.stockMessage.set('Không tải được tồn kho. Vui lòng chọn lại chi nhánh.'); }
+    });
+  }
+  get branchHasStock(): boolean {
+    if (!this.stockReady()) return false;
+    const required = new Map<number, number>();
+    for (const item of this.cartService.selectedItems()) {
+      const ids = item.productId === 99 || item.productId === 100
+        ? (item.options.boxDonuts || []).map(d => d.productId) : [item.productId];
+      if (!ids.length) return false;
+      for (const id of ids) required.set(id, (required.get(id) || 0) + item.quantity);
+    }
+    return [...required].every(([id, qty]) => (this.branchStock()[id] || 0) >= qty);
+  }
   
   // Validation messages
   phoneError = signal('');
@@ -100,20 +149,38 @@ export class CheckoutComponent implements OnInit {
   
   // Modal state
   showTimeModal = signal(false);
-  selectedDate = signal(new Date().toISOString().split('T')[0]);
-  selectedHour = signal(new Date().getHours().toString().padStart(2, '0'));
-  selectedMinute = signal(new Date().getMinutes().toString().padStart(2, '0'));
+  selectedDate = signal(localDateValue());
+  selectedDateText = signal(displayPickupDate(localDateValue()));
+  changeSelectedDateFromCalendar(value: string) { this.changeSelectedDate(displayPickupDate(value)); }
+  changeSelectedDate(value: string) {
+    this.selectedDateText.set(value);
+    this.selectedDate.set(parsePickupDate(value));
+  }
+  selectedHour = signal('07');
+  selectedMinute = signal('00');
   
-  minDate = new Date().toISOString().split('T')[0];
+  minDate = localDateValue();
   
-  hours = Array.from({length: 24}, (_, i) => i.toString().padStart(2, '0'));
-  minutes = Array.from({length: 60}, (_, i) => i.toString().padStart(2, '0'));
+  hours = PICKUP_HOURS;
+  get minutes() { return this.selectedHour() === '21' ? ['00'] : PICKUP_MINUTES; }
+  onHourChange(hour: string) {
+    this.selectedHour.set(hour);
+    if (hour === '21') this.selectedMinute.set('00');
+  }
   
   paymentMethod = signal('cash');
   agreedToTerms = signal(false);
   paymentSplit = signal<'deposit' | 'full'>('deposit');
 
   ngOnInit() {
+    this.http.get<{ _id: string; name: string; address: string; active: boolean }[]>(`${environment.apiBase}/api/branches`).subscribe({
+      next: rows => {
+        this.branches.set(rows.filter(b => b.active));
+        const coords = this.lastDeliveryCoordinates;
+        if (coords) this.calculateNearestBranch(coords.lat, coords.lng);
+      },
+      error: () => this.branch.set('')
+    });
     if (this.authService.isLoggedIn()) {
       const u = this.authService.user();
       if (u) {
@@ -148,12 +215,17 @@ export class CheckoutComponent implements OnInit {
 
   onAddressChange(addr: string) {
     this.address.set(addr);
+    this.addressRequestVersion++;
+    this.branchChosenManually = false;
+    this.lastDeliveryCoordinates = undefined;
 
     if (this.geocodeTimeout) {
       clearTimeout(this.geocodeTimeout);
     }
 
     if (!addr.trim() || this.deliveryMethod() === 'pickup') {
+      this.geocodingActive.set(false);
+      this.geocodingError.set(false);
       this.nearestBranchSuggestion.set('');
       this.geocodedDistance.set(null);
       return;
@@ -165,16 +237,18 @@ export class CheckoutComponent implements OnInit {
   }
 
   geocodeAddress(addr: string) {
+    const requestVersion = ++this.addressRequestVersion;
     this.geocodingActive.set(true);
     this.geocodingError.set(false);
 
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`;
-    this.http.get<any[]>(url).subscribe({
+    this.http.post<{ lat: number; lng: number; precision: string }>(`${environment.apiBase}/api/delivery-location`, { address: addr }).subscribe({
       next: (res) => {
+        if (requestVersion !== this.addressRequestVersion) return;
         this.geocodingActive.set(false);
-        if (res && res.length > 0) {
-          const lat = parseFloat(res[0].lat);
-          const lng = parseFloat(res[0].lon);
+        if (res && Number.isFinite(res.lat) && Number.isFinite(res.lng)) {
+          const lat = res.lat;
+          const lng = res.lng;
+          this.addressLocationApproximate.set(res.precision === 'street');
           this.calculateNearestBranch(lat, lng);
         } else {
           this.geocodingError.set(true);
@@ -183,6 +257,7 @@ export class CheckoutComponent implements OnInit {
         }
       },
       error: (err) => {
+        if (requestVersion !== this.addressRequestVersion) return;
         console.error('Geocoding error:', err);
         this.geocodingActive.set(false);
         this.geocodingError.set(true);
@@ -193,6 +268,8 @@ export class CheckoutComponent implements OnInit {
   }
 
   private calculateNearestBranch(lat: number, lng: number) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    this.lastDeliveryCoordinates = { lat, lng };
     let closestBranch: any = null;
     let minDistance = Infinity;
 
@@ -205,9 +282,10 @@ export class CheckoutComponent implements OnInit {
     });
 
     if (closestBranch) {
-      const mapping: { [key: number]: string } = { 1: 'chinhanh1', 2: 'chinhanh2' };
-      const val = mapping[closestBranch.id] || 'chinhanh1';
-      this.branch.set(val);
+      const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const street = closestBranch.id === 1 ? 'to hieu' : 'tho nhuom';
+      const matched = this.branches().find(b => normalize(`${b.name} ${b.address}`).includes(street));
+      if (matched && !this.branchChosenManually && this.branch() !== matched._id) this.selectBranch(matched._id, false);
       this.distanceKm.set(minDistance);
       this.nearestBranchSuggestion.set(closestBranch.name);
       this.geocodedDistance.set(minDistance);
@@ -222,10 +300,11 @@ export class CheckoutComponent implements OnInit {
   private countdownInterval: any = null;
 
   get subtotal() {
-    return this.cartService.totalPrice();
+    return this.cartService.selectedItems().reduce((sum, item) => sum + item.price * item.quantity, 0);
   }
 
   readonly shippingResult = computed(() => {
+    if (!this.cartService.selectedItems().length) return { fee: 0, estimatedTime: '' };
     if (this.deliveryMethod() === 'pickup') return { fee: 0, estimatedTime: '' };
     return calculateShipping(this.distanceKm(), this.subtotal);
   });
@@ -272,7 +351,7 @@ export class CheckoutComponent implements OnInit {
     const addressValid = this.deliveryMethod() === 'pickup' || this.address().length > 0;
 
     return phoneValid && addressValid && recipientValid && branchValid && timeValid
-      && this.cartService.items().length > 0 && !this.shippingOutOfRange && this.agreedToTerms();
+      && this.cartService.selectedItems().length > 0 && this.branchHasStock && !this.shippingOutOfRange && this.agreedToTerms();
   }
 
   validatePhone() {
@@ -308,6 +387,15 @@ export class CheckoutComponent implements OnInit {
   }
 
   openTimeModal() {
+    this.minDate = localDateValue();
+    if (!this.deliveryTime()) {
+      const now = new Date();
+      if (now.getHours() >= 21) now.setDate(now.getDate() + 1);
+      this.selectedDate.set(localDateValue(now));
+      this.selectedHour.set(now.getHours() >= 7 && now.getHours() < 21 ? String(now.getHours()).padStart(2, '0') : '07');
+      this.selectedMinute.set(now.getHours() >= 7 && now.getHours() < 21 ? String(now.getMinutes()).padStart(2, '0') : '00');
+    }
+    this.selectedDateText.set(displayPickupDate(this.selectedDate()));
     this.showTimeModal.set(true);
   }
 
@@ -316,8 +404,17 @@ export class CheckoutComponent implements OnInit {
   }
 
   confirmTime() {
+    if (!this.selectedDate() || !validPickupTime(`${this.selectedHour()}:${this.selectedMinute()}`)) {
+      this.timeError.set('Vui lòng chọn ngày hợp lệ và giờ nhận từ 07:00 đến 21:00.');
+      return;
+    }
     const now = new Date();
-    const selDate = new Date(this.selectedDate());
+    const selDate = new Date(this.selectedDate() + 'T00:00:00');
+    const pickup = new Date(`${this.selectedDate()}T${this.selectedHour()}:${this.selectedMinute()}:59`);
+    if (!Number.isFinite(pickup.getTime()) || pickup < now) {
+      this.timeError.set('Vui lòng chọn thời gian nhận không nằm trong quá khứ.');
+      return;
+    }
     
     // Đơn lớn đặt trước tối thiểu 3 ngày (Party L, bánh tiệc)
     const cls = this.orderClassification();
@@ -352,6 +449,7 @@ export class CheckoutComponent implements OnInit {
 
     return {
       orderId: 'DH-' + Math.floor(1000000 + Math.random() * 9000000),
+      branchId: this.branch(),
       totalAmount: this.total,
       orderType: cls.orderType,
       depositPercent,
@@ -364,7 +462,7 @@ export class CheckoutComponent implements OnInit {
       customerInfo: {
         name: this.recipient(),
         phone: this.phoneNumber(),
-        address: this.deliveryMethod() === 'pickup' ? `Lấy tại quầy (${this.branch()})` : this.address() + (this.branch() ? ` (Chi nhánh: ${this.branch()})` : ''),
+        address: this.deliveryMethod() === 'pickup' ? `Lấy tại quầy (${this.branches().find(b => b._id === this.branch())?.name || ''})` : this.address(),
         deliveryTime: this.deliveryTime(),
         notes: this.notes(),
         isGift: this.isGift(),
@@ -375,7 +473,7 @@ export class CheckoutComponent implements OnInit {
       shippingFee: this.shippingFee,
       referralDiscount: this.discount,
       voucherCode: this.appliedVoucherCode() || undefined,
-      items: this.cartService.items().map(item => ({
+      items: this.cartService.selectedItems().map(item => ({
         id: item.id,
         name: item.name,
         price: item.price,
@@ -383,6 +481,7 @@ export class CheckoutComponent implements OnInit {
         image: item.image,
         options: {
           heating: item.options.heating,
+          boxDonuts: item.options.boxDonuts,
           toppings: item.options.toppings
         }
       }))
@@ -414,7 +513,7 @@ export class CheckoutComponent implements OnInit {
           localStorage.removeItem('pendingReferralDiscount');
           this.referralActive.set(false);
         }
-        this.cartService.clearCart();
+        this.cartService.removePurchasedItems(order.items);
         if (this.authService.isLoggedIn()) {
           this.authService.fetchMe().subscribe({ error: () => {} });
           this.router.navigate(['/orders']);
@@ -425,6 +524,7 @@ export class CheckoutComponent implements OnInit {
       },
       error: (err) => {
         console.error('Order error:', err);
+        if (err.status === 409) this.selectBranch(this.branch());
         alert('Lỗi khi đặt hàng: ' + (err.error?.message || err.message || JSON.stringify(err.error)));
       }
     });

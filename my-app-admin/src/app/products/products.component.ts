@@ -38,6 +38,7 @@ export class ProductsComponent implements OnInit {
   currentPage = 1;
 
   ngOnInit() {
+    this.service.fetchBranches();
     this.service.fetchAll();
     this.service.fetchCategories();
   }

@@ -19,6 +19,7 @@ export class VNPayPaymentComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
 
   order = signal<any>(null);
+  isProcessing = signal(false);
   orderDescription = signal<string>('');
 
   timeLeft = signal<number>(750); // 12 minutes 30 seconds
@@ -76,22 +77,24 @@ export class VNPayPaymentComponent implements OnInit, OnDestroy {
 
   confirmPayment() {
     const o = this.order();
-    if (!o) return;
+    if (!o || this.isProcessing()) return;
+    this.isProcessing.set(true);
 
     o.paymentStatus = 'paid';
     o.depositPaid = true;
 
     this.orderService.addOrder(o).subscribe({
-      next: () => {
+      next: (created) => {
         localStorage.removeItem('pendingOrder');
+        if (o.orderType === 'custom') sessionStorage.removeItem('customPartyPaymentDraft');
         localStorage.removeItem('pendingReferralDiscount');
-        this.cartService.clearCart();
+        if (o.orderType !== 'custom') this.cartService.removePurchasedItems(o.items);
 
         if (this.authService.isLoggedIn()) {
           this.authService.fetchMe().subscribe({ error: () => { } });
           this.router.navigate(['/orders']);
         } else {
-          localStorage.setItem('guestCheckoutInfo', JSON.stringify({
+          if (o.orderType !== 'custom') localStorage.setItem('guestCheckoutInfo', JSON.stringify({
             name: o.customerInfo.name,
             phone: o.customerInfo.phone,
             address: o.customerInfo.address
@@ -100,19 +103,22 @@ export class VNPayPaymentComponent implements OnInit, OnDestroy {
             queryParams: {
               phone: o.customerInfo.phone,
               name: o.customerInfo.name,
-              justPlaced: o.orderId
+              justPlaced: created.orderId
             }
           });
         }
       },
       error: (err) => {
+        this.isProcessing.set(false);
         alert('Đã xảy ra lỗi khi tạo đơn hàng: ' + (err.error?.message || err.message));
       }
     });
   }
 
   cancelPayment() {
+    if (this.isProcessing()) return;
+    const target = this.order()?.orderType === 'custom' ? '/custom-party' : '/checkout';
     localStorage.removeItem('pendingOrder');
-    this.router.navigate(['/checkout']);
+    this.router.navigate([target]);
   }
 }

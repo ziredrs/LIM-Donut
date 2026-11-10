@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { authLimiter, otpLimiter } = require('../middleware/rateLimiters');
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_REGEX = /^[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$/;
 
 // ĐĂNG KÝ
 router.post('/register', authLimiter, async (req, res) => {
@@ -15,7 +15,7 @@ router.post('/register', authLimiter, async (req, res) => {
     if (!username || username.length < 3) {
       return res.status(400).json({ message: 'Tên đăng nhập phải có ít nhất 3 ký tự.' });
     }
-    if (!email || !EMAIL_REGEX.test(email)) {
+    if (typeof email !== 'string' || email.length > 254 || email.split('@')[0].length > 64 || !EMAIL_REGEX.test(email)) {
       return res.status(400).json({ message: 'Email không đúng định dạng.' });
     }
     if (!password || password.length < 6) {

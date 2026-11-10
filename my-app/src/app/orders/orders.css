@@ -220,7 +220,19 @@
 }
 
 /* Progress Bar */
+.order-review-section { padding: 24px 30px; border-top: 1px solid #f1f5f9; }
+.order-review-section h3 { font-size: 1.3rem; margin-bottom: 18px; }
+.order-review-form { border: 1px solid #d7dce2; border-radius: 8px; padding: 24px; margin-top: 16px; }
+.order-review-form h4 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
+.review-quality { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.review-stars { display: flex; }
+.review-stars button { background: none; border: 0; padding: 2px; color: #ffb400; font-size: 1.4rem; }
+.review-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 18px; }
+.review-suggestions button { border: 1px solid #dceaff; background: #f0f7ff; color: #498eec; border-radius: 18px; padding: 7px 12px; font-size: .85rem; }
+.order-card .card-footer > .d-flex.gap-2 { flex-wrap: wrap; }
+
 .order-progress {
+  --progress-step-width: 100px;
   padding: 20px 0 40px;
   position: relative;
 }
@@ -228,8 +240,8 @@
 .progress-line {
   position: absolute;
   top: 35px;
-  left: 10%;
-  right: 10%;
+  left: calc(var(--progress-step-width) / 2);
+  right: calc(var(--progress-step-width) / 2);
   height: 2px;
   background: #e2e8f0;
   z-index: 1;
@@ -246,7 +258,8 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  width: 100px;
+  width: var(--progress-step-width);
+  flex-shrink: 0;
   position: relative;
   z-index: 2;
 }
@@ -315,3 +328,20 @@
     padding: 10px 0;
   }
 }
+
+.cancel-otp-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 28px;
+  border: 0;
+  border-radius: 24px;
+  text-align: center;
+  color: #1e293b;
+  box-shadow: 0 20px 60px #0003;
+}
+.cancel-otp-dialog::backdrop { background: #0006; backdrop-filter: blur(4px); }
+.cancel-otp-dialog h2 { font-family: var(--font-primary); font-size: 1.4rem; font-weight: 700; }
+.cancel-otp-dialog .otp-code { text-align: center; letter-spacing: 0.5em; font-size: 1.6rem; font-weight: 700; }

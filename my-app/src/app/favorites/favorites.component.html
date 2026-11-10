@@ -7,6 +7,9 @@
   </section>
 
   <section class="container py-4">
+    @if (authService.favoriteError()) {
+      <div class="alert alert-danger" role="alert">{{ authService.favoriteError() }} <a routerLink="/login">Đăng nhập</a></div>
+    }
     @if (favoriteProducts.length === 0) {
       <div class="empty-favorites text-center py-5">
         <i class="bi bi-heart" style="font-size: 4rem; color: #ccc;"></i>
@@ -21,7 +24,7 @@
             <div class="fav-card">
               <div class="fav-card-img" [routerLink]="['/product', product.id]">
                 <img [src]="product.image | imgUrl" [alt]="product.name" />
-                <button class="remove-fav-btn" (click)="$event.stopPropagation(); removeFavorite(product)" title="Bỏ yêu thích">
+                <button type="button" class="remove-fav-btn" [disabled]="authService.favoritePending()" (click)="$event.stopPropagation(); removeFavorite(product)" title="Bỏ yêu thích">
                   <i class="bi bi-heart-fill"></i>
                 </button>
               </div>

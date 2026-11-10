@@ -1,0 +1,20 @@
+@import '../shared-banner.css';
+:host { display: block; }
+.policy-page { font-family: var(--font-primary); }
+.policy-content { max-width: 1100px; margin: 0 auto; padding: 48px 16px; }
+.policy-content > .card { border-radius: 24px; }
+/* Policy */
+.policy-block h4 {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.policy-block ul {
+  padding-left: 20px;
+}
+
+.policy-block ul li {
+  margin-bottom: 8px;
+  line-height: 1.6;
+  color: #444;
+}

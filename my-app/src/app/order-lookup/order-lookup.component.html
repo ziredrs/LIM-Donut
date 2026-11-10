@@ -95,3 +95,28 @@
     }
   </div>
 </main>
+
+<dialog #cancelOtpDialog class="cancel-otp-dialog" aria-labelledby="cancelOtpTitle" (cancel)="otpBusy() && $event.preventDefault()">
+  <h2 id="cancelOtpTitle">{{ otpSuccess() ? 'Đã hủy đơn hàng' : 'Xác nhận hủy đơn bằng OTP' }}</h2>
+  @if (otpSuccess()) {
+    <p>Đơn {{ selectedCancelOrder()?.orderId }} đã được hủy thành công.</p>
+  } @else {
+    <p>Đơn hàng: <strong>{{ selectedCancelOrder()?.orderId }}</strong></p>
+    @if (otpDemoCode()) {
+      <div class="alert alert-info" role="status"><strong>OTP demo trên local — không gửi SMS</strong><p class="mb-1 mt-2">Mã để thử luồng: <strong class="fs-4" style="letter-spacing:.25em">{{ otpDemoCode() }}</strong></p><small>Mã có hiệu lực 5 phút. Nhập mã bên dưới để xác nhận; đơn hàng sẽ được cập nhật trong database đang kết nối.</small></div>
+    } @else if (otpSent()) {
+      <p>Nhập OTP gồm <strong>4 chữ số</strong> đã gửi đến <strong>{{ maskedPhone() }}</strong>. Mã có hiệu lực 5 phút.</p>
+    }
+    <form (ngSubmit)="confirmCancelOtp()">
+      <label for="cancelOtp" class="form-label">Mã OTP <span class="text-danger">*</span></label>
+      <input id="cancelOtp" name="cancelOtp" class="form-control otp-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="4" pattern="[0-9]{4}" required placeholder="0000" [value]="cancelOtp()" (input)="updateCancelOtp($event)" aria-describedby="cancelOtpError">
+      <p class="small text-muted mt-3">Tiền cọc (nếu có) sẽ không được hoàn theo chính sách hủy đơn.</p>
+      <p id="cancelOtpError" class="text-danger" role="alert">{{ otpError() }}</p>
+      <button type="submit" class="btn btn-danger w-100" [disabled]="cancelOtp().length !== 4 || otpBusy()">{{ otpBusy() ? 'Đang xử lý…' : 'Xác nhận hủy đơn' }}</button>
+      <button type="button" class="btn btn-link mt-2" [disabled]="otpBusy() || resendSeconds() > 0" (click)="sendCancelOtp()">{{ resendSeconds() ? 'Gửi lại sau ' + resendSeconds() + ' giây' : 'Gửi lại OTP' }}</button>
+    </form>
+  }
+  <button type="button" class="btn btn-secondary mt-3" [disabled]="otpBusy()" (click)="cancelOtpDialog.close()">Đóng</button>
+</dialog>
+
+<app-cancel-reason-dialog (confirmed)="beginCancelOtp($event)" (deliveryUpdated)="onDeliveryUpdated()" />

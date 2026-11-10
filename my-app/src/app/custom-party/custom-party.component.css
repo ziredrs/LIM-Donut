@@ -39,16 +39,16 @@
 }
 
 /* ===== Steps Bar ===== */
-.steps-bar { display: flex; align-items: center; justify-content: center; max-width: 600px; margin: 0 auto 2rem; padding: 0 2rem; }
-.step-item { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem 1rem; border-radius: 24px; transition: all 0.3s; }
+.steps-bar { display: grid; grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr) 30px minmax(0, 1fr); align-items: center; max-width: 900px; margin: 3rem auto 2rem; padding: 0 1rem; }
+.step-item { display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem 0.25rem; border-radius: 24px; transition: all 0.3s; }
 .step-item:hover { background: rgba(113,172,208,0.08); }
-.step-num { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; background: #e0e0e0; color: #999; transition: all 0.3s; }
+.step-num { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; line-height: 1; background: #e0e0e0; color: #999; transition: all 0.3s; }
 .step-item.active .step-num { background: var(--color-blue); color: #fff; }
 .step-item.done .step-num { background: #4caf50; color: #fff; }
-.step-label { font-size: 0.88rem; color: #999; font-weight: 500; transition: color 0.3s; }
+.step-label { font-size: 0.88rem; color: #999; font-weight: 500; white-space: nowrap; transition: color 0.3s; }
 .step-item.active .step-label { color: #333; font-weight: 600; }
 .step-item.done .step-label { color: #4caf50; }
-.step-line { width: 50px; height: 3px; background: #e0e0e0; border-radius: 2px; transition: background 0.3s; }
+.step-line { width: 30px; height: 3px; background: #e0e0e0; border-radius: 2px; transition: background 0.3s; }
 .step-line.active { background: var(--color-blue); }
 
 /* ===== Generic ===== */
@@ -157,6 +157,28 @@
   transition: background 0.5s ease;
   overflow: hidden;
 }
+
+.donut-body[data-shape='square'] {
+  border-radius: 18%;
+}
+.donut-body[data-shape='square'] .donut-hole { border-radius: 18%; }
+.donut-body[data-shape='star'] {
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 62% 34%, 98% 35%, 70% 57%, 79% 93%, 50% 72%, 21% 93%, 30% 57%, 2% 35%, 38% 34%);
+}
+.donut-body[data-shape='star'] .donut-hole {
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 62% 34%, 98% 35%, 70% 57%, 79% 93%, 50% 72%, 21% 93%, 30% 57%, 2% 35%, 38% 34%);
+}
+.donut-body[data-shape='heart'] {
+  border-radius: 0;
+  clip-path: polygon(50% 15%, 61% 5%, 73% 1%, 85% 4%, 95% 14%, 100% 28%, 98% 43%, 90% 57%, 75% 73%, 50% 98%, 25% 73%, 10% 57%, 2% 43%, 0% 28%, 5% 14%, 15% 4%, 27% 1%, 39% 5%);
+}
+.donut-body[data-shape='heart'] .donut-hole {
+  border-radius: 0;
+  clip-path: polygon(50% 15%, 61% 5%, 73% 1%, 85% 4%, 95% 14%, 100% 28%, 98% 43%, 90% 57%, 75% 73%, 50% 98%, 25% 73%, 10% 57%, 2% 43%, 0% 28%, 5% 14%, 15% 4%, 27% 1%, 39% 5%);
+}
+.donut-body:not([data-shape='torus']) .sauce-layer { border-radius: inherit; }
 
 .donut-hole {
   position: absolute;
@@ -438,7 +460,7 @@ img.topping-particle {
 
 /* ===== Step 3 Arrangement ===== */
 .arrangement-card {
-  cursor: pointer; border: 2px solid #eee; transition: all 0.25s; position: relative;
+  cursor: pointer; border: 2px solid #eee; transition: all 0.25s; position: relative; height: 100%;
 }
 .arrangement-card:hover { border-color: var(--color-steel-blue); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 .arrangement-card.selected { border-color: var(--color-blue); background: rgba(113,172,208,0.08); }
@@ -541,3 +563,9 @@ img.topping-particle {
   .summary-preview { display: none; }
   .confetti-text { padding: 2rem; margin: 0 1rem; }
 }
+
+.party-payment-methods { border: 0; padding: 0; min-width: 0; }
+.party-payment-option { display: flex; align-items: center; gap: 12px; padding: 15px 18px; margin-bottom: 10px; border: 1px solid #dce5ee; border-radius: 16px; cursor: pointer; background: #fff; }
+.party-payment-option.selected { border-color: #4a90e2; background: #f1f7ff; }
+.party-payment-option input { width: 18px; height: 18px; accent-color: #4a90e2; }
+.party-payment-option span { font-weight: 500; }

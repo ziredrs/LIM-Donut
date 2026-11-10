@@ -33,12 +33,7 @@ export class ProductDetailComponent implements OnInit, OnDestroy {
   selectedToppings: { name: string, price: number, quantity: number }[] = [];
   quantity: number = 1;
   
-  reviewComment: string = '';
-  suggestedReviews: string[] = ['Donut rất ngon', 'Trang trí đẹp mắt', 'Giao hàng nhanh', 'Đóng gói cẩn thận', 'Sẽ ủng hộ tiếp'];
-  selectedRating = signal(5);
   reviews = signal<Review[]>([]);
-  reviewSuccessMessage = signal('');
-  isSubmittingReview = signal(false);
   
   extraToppingsList = [
     { name: 'Sốt Socola', price: '5.000' },
@@ -386,14 +381,6 @@ export class ProductDetailComponent implements OnInit, OnDestroy {
     this.activeTab = tab;
   }
 
-  addSuggestion(suggestion: string): void {
-    if (this.reviewComment) {
-      this.reviewComment += ', ' + suggestion;
-    } else {
-      this.reviewComment = suggestion;
-    }
-  }
-
   toggleFavorite() {
     if (!this.product) return;
     const obs = this.authService.toggleFavorite(this.product.id);
@@ -469,10 +456,6 @@ export class ProductDetailComponent implements OnInit, OnDestroy {
     this.router.navigate(['/checkout']);
   }
 
-  setRating(n: number): void {
-    this.selectedRating.set(n);
-  }
-
   loadReviews(productId: number): void {
     this.reviewService.getReviews(productId).subscribe({
       next: (reviews) => {
@@ -485,32 +468,19 @@ export class ProductDetailComponent implements OnInit, OnDestroy {
 
   /** Đồng bộ rating/số review hiển thị với dữ liệu review thật (thay số tĩnh) */
   private syncRatingFromReviews(reviews: Review[]): void {
-    if (!this.product || reviews.length === 0) return;
-    const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
+    if (!this.product) return;
+    const avg = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
     this.product.rating = Math.round(avg);
     this.product.reviews = String(reviews.length);
   }
 
-  submitReview(): void {
-    if (!this.reviewComment.trim() || !this.product || this.isSubmittingReview()) return;
-    this.isSubmittingReview.set(true);
-    this.reviewService.addReview({
-      productId: this.product.id,
-      rating: this.selectedRating(),
-      comment: this.reviewComment.trim()
-    }).subscribe({
-      next: (review) => {
-        this.reviews.update(list => [review, ...list]);
-        this.reviewComment = '';
-        this.selectedRating.set(5);
-        this.reviewSuccessMessage.set('Cảm ơn bạn đã đánh giá!');
-        this.isSubmittingReview.set(false);
-        setTimeout(() => this.reviewSuccessMessage.set(''), 3000);
-      },
-      error: () => {
-        this.isSubmittingReview.set(false);
-        alert('Lỗi khi gửi đánh giá!');
-      }
-    });
+  reviewAverage(): number {
+    const reviews = this.reviews();
+    return reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0;
+  }
+
+  reviewPercent(star: number): number {
+    const reviews = this.reviews();
+    return reviews.length ? reviews.filter(review => review.rating === star).length / reviews.length * 100 : 0;
   }
 }
