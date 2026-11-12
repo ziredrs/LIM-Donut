@@ -1,11 +1,11 @@
 # Hướng dẫn deploy LỊM DONUT (GitHub + Vercel + Render + MongoDB Atlas)
 
 ## 0. Chuẩn bị đã xong sẵn trong code
-- ✅ URL API tập trung ở `my-app/src/environments/` và `my-app-admin/src/environments/`
+-  URL API tập trung ở `my-app/src/environments/` và `my-app-admin/src/environments/`
   (dev tự dùng `localhost:3000`, build production dùng URL trong `environment.ts`)
-- ✅ `vercel.json` cho cả 2 app (SPA rewrite — F5 không bị 404)
-- ✅ `trust proxy` cho rate-limiter chạy sau proxy Render
-- ✅ `.gitignore` đã chặn `backend/.env`, `node_modules/`, `backend/uploads/`
+-  `vercel.json` cho cả 2 app (SPA rewrite — F5 không bị 404)
+-  `trust proxy` cho rate-limiter chạy sau proxy Render
+-  `.gitignore` đã chặn `backend/.env`, `node_modules/`, `backend/uploads/`
 
 ## 1. Push lên GitHub
 ```bash
@@ -74,8 +74,7 @@ https://<ten-app>.vercel.app,https://<ten-admin>.vercel.app
 ```
 Save → Render tự redeploy. Xong!
 
-## Lưu ý sau khi deploy
-- **Render free ngủ sau 15 phút không ai dùng** → request đầu tiên chờ ~30-60s là bình thường (nói trước với giám khảo khi demo 😄).
+## Note:
 - **Ảnh upload (bằng chứng đóng gói / khiếu nại) sẽ MẤT mỗi khi Render restart** (disk ephemeral). Demo thì ổn; muốn bền cần chuyển sang Cloudinary.
 - OTP quên mật khẩu: xem trong **Logs** của service Render (dòng `[OTP] ...`).
 - Ảnh sản phẩm nằm trong `my-app/public/` được deploy cùng frontend nên không bị ảnh hưởng.

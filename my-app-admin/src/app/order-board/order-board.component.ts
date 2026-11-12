@@ -87,6 +87,9 @@ export class OrderBoardComponent implements OnInit {
   }
 
   nextStatuses(order: Order): string[] {
+    if (order.status === 'Đã đóng gói') {
+      return order.deliveryMethod === 'pickup' ? ['Sẵn sàng lấy'] : ['Đang giao'];
+    }
     return VALID_TRANSITIONS[order.status] || [];
   }
 
