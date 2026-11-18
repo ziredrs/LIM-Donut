@@ -4,8 +4,8 @@ Website thuong mai dien tu ban banh donut thu cong, ho tro dat hang truc tuyen, 
 
 ## Demo
 
-- **Website khach hang:** https://lim-donut.vercel.app
-- **API Backend:** https://limdonut-backend.onrender.com
+- **Website khach hang:** https://limdonut.vercel.app
+- **API Backend:** https://limdonutadmin.vercel.app/
 
 ## Cong nghe su dung
 
