@@ -10,8 +10,6 @@
 
 Website thương mại điện tử dành cho thương hiệu bánh donut Lịm Donuts, hỗ trợ mua sắm trực tuyến, đặt bánh tùy chỉnh, quản lý đơn hàng và vận hành cửa hàng trên nhiều chi nhánh.
 
-Dự án được phát triển trong học phần **Phát triển Web Kinh doanh 1 và 2** tại Trường Đại học Kinh tế - Luật, ĐHQG-HCM. Giai đoạn Web 2 tập trung hoàn thiện backend, cơ sở dữ liệu, xử lý nghiệp vụ và tích hợp hệ thống.
-
 ## 🌐 Live Demo
 
 | Thành phần | Địa chỉ |
@@ -19,8 +17,6 @@ Dự án được phát triển trong học phần **Phát triển Web Kinh doan
 | Website khách hàng | [limdonut.vercel.app](https://limdonut.vercel.app) |
 | Website quản trị | [limdonutadmin.vercel.app](https://limdonutadmin.vercel.app/) |
 | Backend REST API | [limdonut-backend-ew0p.onrender.com](https://limdonut-backend-ew0p.onrender.com/api/products) |
-
-> Đây là dự án học thuật. Không sử dụng thông tin cá nhân, thông tin thanh toán thật hoặc tài khoản sản xuất để thử nghiệm. Admin yêu cầu tài khoản có quyền quản trị; thông tin đăng nhập không được công bố trong README.
 
 ## ✨ Chức năng chính
 
@@ -344,7 +340,7 @@ npm test
 - Trường: Đại học Kinh tế - Luật, ĐHQG-HCM.
 - Học phần: Phát triển Web Kinh doanh 1 và 2.
 - Đề tài: Phân tích, thiết kế và phát triển website thương mại điện tử Lịm Donuts.
-- Nhóm thực hiện Web 2: 2 thành viên.
+- Nhóm thực hiện Web 2: Bùi Thị Hải Châu và Bùi Thị Quế Lĩnh.
 
 ---
 
