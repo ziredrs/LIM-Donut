@@ -142,18 +142,6 @@ Các collection tương ứng với các Mongoose models hiện có trong `backe
 | `complaints` | Khiếu nại khách hàng |
 | `contactmessages` | Tin nhắn liên hệ |
 
-```mermaid
-erDiagram
-    BRANCH ||--o{ BRANCH_INVENTORY : manages
-    PRODUCT ||--o{ BRANCH_INVENTORY : stocked_as
-    BRANCH o|--o{ ORDER : fulfills
-    USER o|--o{ ORDER : places
-    ORDER ||--o| ORDER_CANCEL_OTP : verifies
-    ORDER o|--o{ REVIEW : supports
-    PRODUCT ||--o{ REVIEW : receives
-```
-
-Sơ đồ trên là mô hình dữ liệu khái quát. `BranchInventory.productId` tham chiếu `Product.id` kiểu Number; `branchId` liên kết với `Branch._id` kiểu ObjectId. Đơn khách vãng lai có thể không có `userId`, và một số đơn cũ có thể chưa có `branchId`. OTP có chỉ mục TTL để hỗ trợ dọn bản ghi hết hạn.
 
 ## 🔌 Selected API Endpoints
 
